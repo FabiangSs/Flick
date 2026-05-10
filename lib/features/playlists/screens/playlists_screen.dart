@@ -39,8 +39,7 @@ class PlaylistsScreen extends ConsumerWidget {
           ],
         ),
       ),
-      floatingActionButton: _buildCreateButton(context, ref),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
     );
   }
 
@@ -108,12 +107,24 @@ class PlaylistsScreen extends ConsumerWidget {
               ),
               color: AppColors.surface,
               onSelected: (value) {
-                if (value == 'import_m3u') {
+                if (value == 'create') {
+                  _showCreatePlaylistDialog(context, ref);
+                } else if (value == 'import_m3u') {
                   _importPlaylist(context, ref);
                 }
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'create',
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.plus, size: 18),
+                      SizedBox(width: 8),
+                      Text('Create Playlist'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
                   value: 'import_m3u',
                   child: Row(
                     children: [
@@ -315,20 +326,6 @@ class PlaylistsScreen extends ConsumerWidget {
             child: Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildCreateButton(BuildContext context, WidgetRef ref) {
-    return FloatingActionButton.extended(
-      onPressed: () => _showCreatePlaylistDialog(context, ref),
-      backgroundColor: AppColors.surfaceLight,
-      foregroundColor: context.adaptiveTextPrimary,
-      elevation: 4,
-      icon: const Icon(LucideIcons.plus),
-      label: const Text(
-        'Create Playlist',
-        style: TextStyle(fontFamily: 'ProductSans'),
       ),
     );
   }

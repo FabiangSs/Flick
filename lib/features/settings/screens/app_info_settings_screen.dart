@@ -332,9 +332,7 @@ class _AppInfoSettingsScreenState extends ConsumerState<AppInfoSettingsScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: AppConstants.spacingMd),
-                  const CircularProgressIndicator(
-                    color: AppColors.textPrimary,
-                  ),
+                  const CircularProgressIndicator(color: AppColors.textPrimary),
                   const SizedBox(height: AppConstants.spacingMd),
                   Text(
                     'Loading patch notes...',
@@ -470,7 +468,7 @@ class _AppInfoSettingsScreenState extends ConsumerState<AppInfoSettingsScreen>
           ),
           const SizedBox(height: 4),
           const Text(
-            'Version 0.13.0-beta.2',
+            'Version 0.14.0-beta.1',
             style: TextStyle(
               fontFamily: 'ProductSans',
               fontSize: 14,
@@ -655,7 +653,7 @@ SOFTWARE.
               NavigationSetting(
                 icon: LucideIcons.info,
                 title: 'About Flick Player',
-                subtitle: 'Version 0.13.0-beta.2',
+                subtitle: 'Version 0.14.0-beta.1',
                 onTap: _showAboutBottomSheet,
               ),
               const SettingsDivider(),
@@ -711,9 +709,8 @@ SOFTWARE.
                     icon: LucideIcons.heart,
                     title: 'Buy me a coffee',
                     subtitle: 'Support development on Ko-fi',
-                    onTap: () => _launchUrl(
-                      'https://ko-fi.com/ultraelectronica',
-                    ),
+                    onTap: () =>
+                        _launchUrl('https://ko-fi.com/ultraelectronica'),
                   ),
                 ],
               );
