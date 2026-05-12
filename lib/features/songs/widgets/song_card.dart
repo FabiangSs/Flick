@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flick/core/theme/app_colors.dart';
 import 'package:flick/core/constants/app_constants.dart';
@@ -29,6 +31,9 @@ class SongCard extends StatefulWidget {
   /// Callback when the card is swiped right.
   final VoidCallback? onSwipeRight;
 
+  /// Whether swipe-to-queue and swipe-to-favorite gestures are enabled.
+  final bool swipeActionsEnabled;
+
   const SongCard({
     super.key,
     required this.song,
@@ -38,6 +43,7 @@ class SongCard extends StatefulWidget {
     this.onTap,
     this.onSwipeLeft,
     this.onSwipeRight,
+    this.swipeActionsEnabled = false,
   });
 
   @override
@@ -60,21 +66,20 @@ class _SongCardState extends State<SongCard> {
     final queueRevealProgress = (-_dragDx / 110).clamp(0.0, 1.0);
     final favoriteRevealProgress = (_dragDx / 110).clamp(0.0, 1.0);
 
-    return RepaintBoundary(
-      child: GestureDetector(
-        onTap: () {
-          AppHaptics.tap();
-          widget.onTap?.call();
-        },
-        onHorizontalDragUpdate: (details) {
-          final nextDx = (_dragDx + details.delta.dx).clamp(-120.0, 120.0);
-          if (nextDx != _dragDx) {
-            setState(() {
-              _dragDx = nextDx;
-            });
-          }
-        },
-        onHorizontalDragEnd: (details) async {
+    GestureDragUpdateCallback? dragUpdate;
+    GestureDragEndCallback? dragEnd;
+    GestureDragCancelCallback? dragCancel;
+    if (widget.swipeActionsEnabled) {
+      dragUpdate = (details) {
+        final nextDx = (_dragDx + details.delta.dx).clamp(-120.0, 120.0);
+        if (nextDx != _dragDx) {
+          setState(() {
+            _dragDx = nextDx;
+          });
+        }
+      };
+      dragEnd = (details) {
+        unawaited(() async {
           final shouldFavorite =
               _dragDx >= 80 ||
               (details.primaryVelocity != null &&
@@ -114,14 +119,26 @@ class _SongCardState extends State<SongCard> {
           setState(() {
             _dragDx = 0;
           });
+        }());
+      };
+      dragCancel = () {
+        if (_dragDx != 0) {
+          setState(() {
+            _dragDx = 0;
+          });
+        }
+      };
+    }
+
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: () {
+          AppHaptics.tap();
+          widget.onTap?.call();
         },
-        onHorizontalDragCancel: () {
-          if (_dragDx != 0) {
-            setState(() {
-              _dragDx = 0;
-            });
-          }
-        },
+        onHorizontalDragUpdate: dragUpdate,
+        onHorizontalDragEnd: dragEnd,
+        onHorizontalDragCancel: dragCancel,
         child: AnimatedOpacity(
           duration: AppConstants.animationNormal,
           opacity: widget.opacity,

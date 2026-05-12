@@ -45,6 +45,9 @@ class OrbitScroll extends StatefulWidget {
   /// Callback when a song card is swiped right.
   final ValueChanged<int>? onSongSwipedRight;
 
+  /// Whether swipe-to-queue and swipe-to-favorite gestures are enabled.
+  final bool swipeActionsEnabled;
+
   /// Controller for external jump-to-index actions.
   final OrbitScrollController? controller;
 
@@ -56,6 +59,7 @@ class OrbitScroll extends StatefulWidget {
     this.onSelectedIndexChanged,
     this.onSongSwipedLeft,
     this.onSongSwipedRight,
+    this.swipeActionsEnabled = false,
     this.controller,
   });
 
@@ -432,6 +436,7 @@ class _OrbitScrollState extends State<OrbitScroll>
                 scale: transform.scale,
                 opacity: transform.opacity,
                 isSelected: transform.isSelected,
+                swipeActionsEnabled: widget.swipeActionsEnabled,
                 onTap: () {
                   AppHaptics.tap();
                   _animateTo(actualIndex.toDouble());

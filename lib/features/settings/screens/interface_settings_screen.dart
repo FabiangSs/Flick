@@ -48,6 +48,18 @@ class InterfaceSettingsScreen extends ConsumerWidget {
                 },
               ),
               const SettingsDivider(),
+              ToggleSetting(
+                icon: LucideIcons.arrowLeftRight,
+                title: 'Swipe Actions',
+                subtitle: 'Swipe songs left to queue or right to favorite',
+                value: appPreferences.swipeActionsEnabled,
+                onChanged: (value) {
+                  ref
+                      .read(appPreferencesProvider.notifier)
+                      .setSwipeActionsEnabled(value);
+                },
+              ),
+              const SettingsDivider(),
               NavigationSetting(
                 icon: LucideIcons.navigation,
                 title: 'Bottom Bar',
@@ -58,6 +70,35 @@ class InterfaceSettingsScreen extends ConsumerWidget {
                       builder: (_) => const BottomBarSettingsScreen(),
                     ),
                   );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: AppConstants.spacingLg),
+          const SettingsSectionHeader('Favorite Removal'),
+          SettingsCard(
+            children: [
+              SelectionSetting(
+                icon: LucideIcons.arrowLeftRight,
+                title: 'Swipe',
+                subtitle: 'Swipe left to unfavorite a song',
+                selected: appPreferences.favoriteRemovalMode == 'swipe',
+                onTap: () {
+                  ref
+                      .read(appPreferencesProvider.notifier)
+                      .setFavoriteRemovalMode('swipe');
+                },
+              ),
+              const SettingsDivider(),
+              SelectionSetting(
+                icon: LucideIcons.mousePointerClick,
+                title: 'Long Press',
+                subtitle: 'Hold a song to unfavorite',
+                selected: appPreferences.favoriteRemovalMode == 'longpress',
+                onTap: () {
+                  ref
+                      .read(appPreferencesProvider.notifier)
+                      .setFavoriteRemovalMode('longpress');
                 },
               ),
             ],

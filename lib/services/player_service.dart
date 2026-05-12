@@ -2864,6 +2864,19 @@ class PlayerService {
       if (playlist != null) {
         _replacePlaybackContext(playlist);
         _setCurrentIndex(_playlist.indexWhere((entry) => entry.id == song.id));
+        if (isShuffleNotifier.value) {
+          final shuffled = buildShufflePlaybackOrder(
+            songs: _playlist,
+            current: song,
+          );
+          _playlist
+            ..clear()
+            ..addAll(shuffled);
+          _playlistQueueEntryIds
+            ..clear()
+            ..addAll(List<int?>.filled(shuffled.length, null));
+          _setCurrentIndex(0);
+        }
         _insertQueuedEntriesAfterCurrent();
       } else {
         final existingIndex = _playlist.indexWhere(

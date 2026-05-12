@@ -39,8 +39,8 @@ class NavBarConfigNotifier extends Notifier<NavBarConfig> {
     );
   }
 
-  Set<NavBarButton> _parseButtons(String raw) {
-    final result = <NavBarButton>{};
+  List<NavBarButton> _parseButtons(String raw) {
+    final result = <NavBarButton>[];
     for (final name in raw.split(',')) {
       final trimmed = name.trim();
       if (trimmed.isEmpty) continue;
@@ -51,7 +51,7 @@ class NavBarConfigNotifier extends Notifier<NavBarConfig> {
     return result;
   }
 
-  String _serializeButtons(Set<NavBarButton> buttons) {
+  String _serializeButtons(List<NavBarButton> buttons) {
     return buttons.map((b) => b.name).join(',');
   }
 
@@ -64,7 +64,7 @@ class NavBarConfigNotifier extends Notifier<NavBarConfig> {
     await prefs.setBool(_showLabelsKey, state.showLabels);
   }
 
-  Future<void> setEnabledButtons(Set<NavBarButton> buttons) async {
+  Future<void> setEnabledButtons(List<NavBarButton> buttons) async {
     if (buttons.isEmpty) return;
     if (_buttonsEqual(state.enabledButtons, buttons)) return;
     state = state.copyWith(enabledButtons: buttons);
@@ -72,15 +72,19 @@ class NavBarConfigNotifier extends Notifier<NavBarConfig> {
   }
 
   Future<void> toggleButton(NavBarButton button) async {
-    final updated = Set<NavBarButton>.from(state.enabledButtons);
+    final updated = List<NavBarButton>.from(state.enabledButtons);
     if (updated.contains(button)) {
       if (updated.length == 1) return;
       updated.remove(button);
     } else {
       updated.add(button);
     }
-    if (_buttonsEqual(state.enabledButtons, updated)) return;
     state = state.copyWith(enabledButtons: updated);
+    await _persist();
+  }
+
+  Future<void> reorderButtons(int oldIndex, int newIndex) async {
+    state = state.reorder(oldIndex, newIndex);
     await _persist();
   }
 
@@ -108,9 +112,12 @@ class NavBarConfigNotifier extends Notifier<NavBarConfig> {
     await _persist();
   }
 
-  bool _buttonsEqual(Set<NavBarButton> a, Set<NavBarButton> b) {
+  bool _buttonsEqual(List<NavBarButton> a, List<NavBarButton> b) {
     if (a.length != b.length) return false;
-    return a.containsAll(b);
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 }
 

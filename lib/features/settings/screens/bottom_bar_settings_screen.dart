@@ -16,6 +16,7 @@ class BottomBarSettingsScreen extends ConsumerWidget {
     final config = ref.watch(navBarConfigProvider);
     final enabled = config.enabledButtons;
     final enabledCount = enabled.length;
+    final disabled = NavBarButton.values.where((b) => !enabled.contains(b)).toList();
 
     return SettingsScaffold(
       title: 'Bottom Bar',
@@ -23,30 +24,101 @@ class BottomBarSettingsScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SettingsSectionHeader('Buttons'),
-          SettingsCard(
-            children: NavBarButton.values.map((button) {
-              final isLast = enabledCount == 1 && enabled.contains(button);
-              return Column(
-                children: [
-                  if (button != NavBarButton.values.first)
-                    const SettingsDivider(),
+          Container(
+            clipBehavior: Clip.none,
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+              border: Border.all(color: AppColors.glassBorder, width: 1),
+            ),
+            child: ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              proxyDecorator: (child, index, animation) {
+                return Material(
+                  elevation: 4,
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+                  child: child,
+                );
+              },
+              itemCount: enabled.length,
+              onReorder: (oldIndex, newIndex) {
+                ref
+                    .read(navBarConfigProvider.notifier)
+                    .reorderButtons(oldIndex, newIndex);
+              },
+              itemBuilder: (context, index) {
+                final button = enabled[index];
+                final isOnly = enabledCount == 1;
+                return Column(
+                  key: ValueKey(button),
+                  children: [
+                    if (index > 0) const SettingsDivider(),
+                    Row(
+                      children: [
+                        ReorderableDragStartListener(
+                          index: index,
+                          child: Padding(
+                            padding: const EdgeInsets.only(
+                              left: 12,
+                              right: 4,
+                              top: 8,
+                              bottom: 8,
+                            ),
+                            child: Icon(
+                              LucideIcons.gripVertical,
+                              color: AppColors.textSecondary.withValues(alpha: 0.4),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: ToggleSetting(
+                            icon: button.icon,
+                            title: button.label,
+                            subtitle: 'Show the ${button.label} tab in the bottom bar',
+                            value: true,
+                            onChanged: isOnly
+                                ? (_) {}
+                                : (_) {
+                                    ref
+                                        .read(navBarConfigProvider.notifier)
+                                        .toggleButton(button);
+                                  },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          if (disabled.isNotEmpty) ...[
+            const SizedBox(height: AppConstants.spacingLg),
+            const SettingsSectionHeader('Disabled'),
+            SettingsCard(
+              children: [
+                for (int i = 0; i < disabled.length; i++) ...[
+                  if (i > 0) const SettingsDivider(),
                   ToggleSetting(
-                    icon: button.icon,
-                    title: button.label,
-                    subtitle: 'Show the ${button.label} tab in the bottom bar',
-                    value: enabled.contains(button),
-                    onChanged: isLast
-                        ? (_) {}
-                        : (_) {
-                            ref
-                                .read(navBarConfigProvider.notifier)
-                                .toggleButton(button);
-                          },
+                    icon: disabled[i].icon,
+                    title: disabled[i].label,
+                    subtitle:
+                    'Enable to show the ${disabled[i].label} tab in the bottom bar',
+                    value: false,
+                    onChanged: (_) {
+                      ref
+                          .read(navBarConfigProvider.notifier)
+                          .toggleButton(disabled[i]);
+                    },
                   ),
                 ],
-              );
-            }).toList(),
-          ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppConstants.spacingLg),
           const SettingsSectionHeader('Appearance'),
           SettingsCard(

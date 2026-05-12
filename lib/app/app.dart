@@ -28,6 +28,7 @@ import 'package:flick/widgets/common/cached_image_widget.dart';
 import 'package:flick/models/song.dart';
 import 'package:flick/services/library_scanner_service.dart';
 import 'package:flick/services/player_service.dart';
+import 'package:flick/models/nav_bar_config.dart';
 
 /// Main application widget for Flick Player.
 class FlickPlayerApp extends StatelessWidget {
@@ -85,8 +86,18 @@ class _MainShellState extends ConsumerState<MainShell>
     // listener doesn't treat the restored song as "new" on cold start.
     _previousSong = ref.read(currentSongProvider);
     _playerService = ref.read(playerServiceProvider);
+    final initialConfig = ref.read(navBarConfigProvider);
+    final defaultPage = initialConfig.orderedButtons.contains(NavBarButton.songs)
+        ? NavBarButton.songs.pageIndex
+        : NavBarButton.menu.pageIndex;
+    ref.read(navigationIndexProvider.notifier).setIndex(defaultPage);
     final initialIndex = ref.read(navigationIndexProvider);
-    _pageController = PageController(initialPage: initialIndex);
+    final initialOrder = _getPageOrder(initialConfig);
+    final initialPosition =
+        initialOrder.indexWhere((b) => b.pageIndex == initialIndex);
+    _pageController = PageController(
+      initialPage: initialPosition >= 0 ? initialPosition : 0,
+    );
     _navBarAnimationController = AnimationController(
       vsync: this,
       duration: AppConstants.animationNormal,
@@ -157,6 +168,36 @@ class _MainShellState extends ConsumerState<MainShell>
       _previousSong = nextSong;
     });
 
+    ref.listenManual<NavBarConfig>(
+      navBarConfigProvider,
+      (previous, next) {
+        if (previous == null || !mounted) return;
+        final currentPageIndex = ref.read(navigationIndexProvider);
+        final oldOrder = _getPageOrder(previous);
+        final newOrder = _getPageOrder(next);
+        final oldPosition =
+            oldOrder.indexWhere((b) => b.pageIndex == currentPageIndex);
+        final newPosition =
+            newOrder.indexWhere((b) => b.pageIndex == currentPageIndex);
+
+        if (newPosition < 0) {
+          // Current page was removed, jump to first page in new order
+          if (_pageController.hasClients && newOrder.isNotEmpty) {
+            _pageController.jumpToPage(0);
+            ref
+                .read(navigationIndexProvider.notifier)
+                .setIndex(newOrder[0].pageIndex);
+          }
+          return;
+        }
+
+        if (oldPosition != newPosition && _pageController.hasClients) {
+          _pageController.jumpToPage(newPosition);
+          ref.read(navigationIndexProvider.notifier).setIndex(currentPageIndex);
+        }
+      },
+    );
+
     _navigationIndexSubscription = ref.listenManual<int>(
       navigationIndexProvider,
       (previous, next) {
@@ -169,18 +210,24 @@ class _MainShellState extends ConsumerState<MainShell>
             return;
           }
 
+          final config = ref.read(navBarConfigProvider);
+          final pageOrder = _getPageOrder(config);
+          final position =
+              pageOrder.indexWhere((b) => b.pageIndex == next);
+          if (position == -1) return;
+
           final currentPage =
               (_pageController.page ?? _pageController.initialPage.toDouble())
                   .round();
-          if (currentPage == next) {
+          if (currentPage == position) {
             return;
           }
 
           if (AppConstants.animationNormal == Duration.zero) {
-            _pageController.jumpToPage(next);
+            _pageController.jumpToPage(position);
           } else {
             _pageController.animateToPage(
-              next,
+              position,
               duration: AppConstants.animationNormal,
               curve: Curves.easeOutCubic,
             );
@@ -353,6 +400,8 @@ class _MainShellState extends ConsumerState<MainShell>
   Widget build(BuildContext context) {
     final currentIndex = ref.watch(navigationIndexProvider);
     final backgroundColor = ref.watch(backgroundColorProvider);
+    final navBarConfig = ref.watch(navBarConfigProvider);
+    final pageOrder = _getPageOrder(navBarConfig);
 
     return AdaptiveColorProvider(
       backgroundColor: backgroundColor,
@@ -389,72 +438,29 @@ class _MainShellState extends ConsumerState<MainShell>
               PageView(
                 controller: _pageController,
                 physics: const ClampingScrollPhysics(),
-                onPageChanged: (index) {
-                  if (ref.read(navigationIndexProvider) != index) {
-                    ref.read(navigationIndexProvider.notifier).setIndex(index);
+                onPageChanged: (position) {
+                  final currentConfig = ref.read(navBarConfigProvider);
+                  final currentOrder = _getPageOrder(currentConfig);
+                  if (position < 0 || position >= currentOrder.length) return;
+                  final enabledCount = currentConfig.orderedButtons.length;
+                  if (position >= enabledCount) {
+                    _pageController.jumpToPage(enabledCount - 1);
+                    return;
+                  }
+                  final pageIndex = currentOrder[position].pageIndex;
+                  if (ref.read(navigationIndexProvider) != pageIndex) {
+                    ref
+                        .read(navigationIndexProvider.notifier)
+                        .setIndex(pageIndex);
                   }
                 },
-                children: [
-                  _buildTab(
-                    tabIndex: 0,
+                children: pageOrder.map((button) {
+                  return _buildTab(
+                    tabIndex: button.pageIndex,
                     currentIndex: currentIndex,
-                    child: MenuScreen(
-                      key: const ValueKey('menu'),
-                      onNavigateToTab: (index) {
-                        ref
-                            .read(navigationIndexProvider.notifier)
-                            .setIndex(index);
-                      },
-                    ),
-                  ),
-                  _buildTab(
-                    tabIndex: 1,
-                    currentIndex: currentIndex,
-                    child: SongsScreen(
-                      key: const ValueKey('songs'),
-                      onNavigationRequested: (index) {
-                        ref
-                            .read(navigationIndexProvider.notifier)
-                            .setIndex(index);
-                      },
-                    ),
-                  ),
-                  _buildTab(
-                    tabIndex: 2,
-                    currentIndex: currentIndex,
-                    child: const SettingsScreen(key: ValueKey('settings')),
-                  ),
-                  _buildTab(
-                    tabIndex: 3,
-                    currentIndex: currentIndex,
-                    child: const AlbumsScreen(key: ValueKey('albums')),
-                  ),
-                  _buildTab(
-                    tabIndex: 4,
-                    currentIndex: currentIndex,
-                    child: const ArtistsScreen(key: ValueKey('artists')),
-                  ),
-                  _buildTab(
-                    tabIndex: 5,
-                    currentIndex: currentIndex,
-                    child: const FoldersScreen(key: ValueKey('folders')),
-                  ),
-                  _buildTab(
-                    tabIndex: 6,
-                    currentIndex: currentIndex,
-                    child: const PlaylistsScreen(key: ValueKey('playlists')),
-                  ),
-                  _buildTab(
-                    tabIndex: 7,
-                    currentIndex: currentIndex,
-                    child: const FavoritesScreen(key: ValueKey('favorites')),
-                  ),
-                  _buildTab(
-                    tabIndex: 8,
-                    currentIndex: currentIndex,
-                    child: const SearchScreen(key: ValueKey('search')),
-                  ),
-                ],
+                    child: _buildScreen(button),
+                  );
+                }).toList(),
               ),
 
               // Unified Bottom Bar (Mini Player + Navigation)
@@ -474,6 +480,47 @@ class _MainShellState extends ConsumerState<MainShell>
         ),
       ),
     );
+  }
+
+  List<NavBarButton> _getPageOrder(NavBarConfig config) {
+    final disabledEssentials = [
+      NavBarButton.menu,
+      NavBarButton.songs,
+      NavBarButton.settings,
+    ].where((b) => !config.orderedButtons.contains(b));
+    return [
+      ...config.orderedButtons,
+      ...disabledEssentials,
+    ];
+  }
+
+  Widget _buildScreen(NavBarButton button) {
+    return switch (button) {
+      NavBarButton.menu => MenuScreen(
+          key: const ValueKey('menu'),
+          onNavigateToTab: (index) {
+            ref.read(navigationIndexProvider.notifier).setIndex(index);
+          },
+        ),
+      NavBarButton.songs => SongsScreen(
+          key: const ValueKey('songs'),
+          onNavigationRequested: (index) {
+            ref.read(navigationIndexProvider.notifier).setIndex(index);
+          },
+        ),
+      NavBarButton.settings =>
+        const SettingsScreen(key: ValueKey('settings')),
+      NavBarButton.albums => const AlbumsScreen(key: ValueKey('albums')),
+      NavBarButton.artists =>
+        const ArtistsScreen(key: ValueKey('artists')),
+      NavBarButton.folders =>
+        const FoldersScreen(key: ValueKey('folders')),
+      NavBarButton.playlists =>
+        const PlaylistsScreen(key: ValueKey('playlists')),
+      NavBarButton.favorites =>
+        const FavoritesScreen(key: ValueKey('favorites')),
+      NavBarButton.search => const SearchScreen(key: ValueKey('search')),
+    };
   }
 
   Widget _buildTab({

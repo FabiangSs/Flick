@@ -17,6 +17,7 @@ class PlaybackDisplaySettingsScreen extends ConsumerWidget {
     final ambientBackgroundEnabled = ref.watch(
       ambientBackgroundEnabledProvider,
     );
+    final appPrefs = ref.watch(appPreferencesProvider);
     final playerService = ref.read(playerServiceProvider);
 
     return SettingsScaffold(
@@ -26,70 +27,120 @@ class PlaybackDisplaySettingsScreen extends ConsumerWidget {
         children: [
           const SettingsSectionHeader('Playback'),
           SettingsCard(
+            children: [_GaplessPlaybackTile(playerService: playerService)],
+          ),
+          const SizedBox(height: AppConstants.spacingLg),
+          const SettingsSectionHeader('Display'),
+          SettingsCard(
             children: [
-              _GaplessPlaybackTile(
-                playerService: playerService,
+              SelectionSetting(
+                icon: LucideIcons.disc,
+                title: 'Song View: Orbital',
+                subtitle: 'Use the orbital songs browser',
+                selected: songsViewMode == SongViewMode.orbit,
+                onTap: () {
+                  ref
+                      .read(songsViewModeProvider.notifier)
+                      .setMode(SongViewMode.orbit);
+                },
+              ),
+              const SettingsDivider(),
+              SelectionSetting(
+                icon: LucideIcons.list,
+                title: 'Song View: List',
+                subtitle: 'Use the list songs browser',
+                selected: songsViewMode == SongViewMode.list,
+                onTap: () {
+                  ref
+                      .read(songsViewModeProvider.notifier)
+                      .setMode(SongViewMode.list);
+                },
+              ),
+              const SettingsDivider(),
+              ToggleSetting(
+                icon: LucideIcons.panelBottom,
+                title: 'Bottom Bar Always Visible',
+                subtitle: 'Keep mini player and nav visible',
+                value: navBarAlwaysVisible,
+                onChanged: (value) {
+                  ref
+                      .read(navBarAlwaysVisibleProvider.notifier)
+                      .setAlwaysVisible(value);
+                },
+              ),
+              const SettingsDivider(),
+              ToggleSetting(
+                icon: LucideIcons.sparkles,
+                title: 'Ambient Background',
+                subtitle: 'Use album art as the blurred app background',
+                value: ambientBackgroundEnabled,
+                onChanged: (value) {
+                  ref
+                      .read(ambientBackgroundEnabledProvider.notifier)
+                      .setEnabled(value);
+                },
+              ),
+              const SettingsDivider(),
+              SliderSetting(
+                icon: LucideIcons.maximize,
+                title: 'Immersive Full View Timer',
+                subtitle:
+                    'Auto-show the Spotify-style immersive full view after inactivity',
+                value: appPrefs.immersiveAutoFullViewSeconds.toDouble(),
+                displayValue: appPrefs.immersiveAutoFullViewSeconds == 0
+                    ? 'Off'
+                    : '${appPrefs.immersiveAutoFullViewSeconds}s',
+                min: 0,
+                max: 15,
+                divisions: 15,
+                onChanged: (value) {
+                  ref
+                      .read(appPreferencesProvider.notifier)
+                      .setImmersiveAutoFullViewSeconds(value.round());
+                },
               ),
             ],
           ),
-              const SizedBox(height: AppConstants.spacingLg),
-              const SettingsSectionHeader('Display'),
-              SettingsCard(
-                children: [
-                  SelectionSetting(
-                    icon: LucideIcons.disc,
-                    title: 'Song View: Orbital',
-                    subtitle: 'Use the orbital songs browser',
-                    selected: songsViewMode == SongViewMode.orbit,
-                    onTap: () {
-                      ref
-                          .read(songsViewModeProvider.notifier)
-                          .setMode(SongViewMode.orbit);
-                    },
-                  ),
-                  const SettingsDivider(),
-                  SelectionSetting(
-                    icon: LucideIcons.list,
-                    title: 'Song View: List',
-                    subtitle: 'Use the list songs browser',
-                    selected: songsViewMode == SongViewMode.list,
-                    onTap: () {
-                      ref
-                          .read(songsViewModeProvider.notifier)
-                          .setMode(SongViewMode.list);
-                    },
-                  ),
-                  const SettingsDivider(),
-                  ToggleSetting(
-                    icon: LucideIcons.panelBottom,
-                    title: 'Bottom Bar Always Visible',
-                    subtitle: 'Keep mini player and nav visible',
-                    value: navBarAlwaysVisible,
-                    onChanged: (value) {
-                      ref
-                          .read(navBarAlwaysVisibleProvider.notifier)
-                          .setAlwaysVisible(value);
-                    },
-                  ),
-                  const SettingsDivider(),
-                  ToggleSetting(
-                    icon: LucideIcons.sparkles,
-                    title: 'Ambient Background',
-                    subtitle: 'Use album art as the blurred app background',
-                    value: ambientBackgroundEnabled,
-                    onChanged: (value) {
-                      ref
-                          .read(ambientBackgroundEnabledProvider.notifier)
-                          .setEnabled(value);
-                    },
-                  ),
-                ],
+          const SizedBox(height: AppConstants.spacingLg),
+          const SettingsSectionHeader('Fast Index Scrolling'),
+          SettingsCard(
+            children: [
+              ToggleSetting(
+                icon: LucideIcons.arrowUpDown,
+                title: 'Fast Index Scrolling',
+                subtitle: 'Alphabetical index rail on the songs screen',
+                value: appPrefs.fastIndexEnabled,
+                onChanged: (value) {
+                  ref
+                      .read(appPreferencesProvider.notifier)
+                      .setFastIndexEnabled(value);
+                },
               ),
-              const SizedBox(height: AppConstants.spacingLg),
-              // Bottom padding for nav bar
-              const SizedBox(height: AppConstants.navBarHeight + 40),
+              if (appPrefs.fastIndexEnabled) ...[
+                const SettingsDivider(),
+                SliderSetting(
+                  icon: LucideIcons.clock,
+                  title: 'Auto-hide Timeout',
+                  subtitle: 'Hide the index rail after inactivity',
+                  value: appPrefs.fastIndexTimeoutSeconds.toDouble(),
+                  displayValue: '${appPrefs.fastIndexTimeoutSeconds}s',
+                  min: 2,
+                  max: 10,
+                  divisions: 8,
+                  onChanged: (value) {
+                    ref
+                        .read(appPreferencesProvider.notifier)
+                        .setFastIndexTimeoutSeconds(value.round());
+                  },
+                ),
+              ],
             ],
           ),
+          const SizedBox(height: AppConstants.spacingLg),
+          // Bottom padding for nav bar
+          const SizedBox(height: AppConstants.navBarHeight + 40),
+        ],
+      ),
     );
   }
 }
@@ -116,8 +167,7 @@ class _GaplessPlaybackTile extends StatelessWidget {
               ? 'Disabled in bit-perfect mode'
               : 'Seamless transition between tracks',
           value: enabled,
-          onChanged: (value) =>
-              playerService.setGaplessPlaybackEnabled(value),
+          onChanged: (value) => playerService.setGaplessPlaybackEnabled(value),
         );
       },
     );

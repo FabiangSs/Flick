@@ -173,8 +173,8 @@ class SongsState {
         result.sort((a, b) => a.fileType.compareTo(b.fileType));
       case SongSortOption.folder:
         result.sort((a, b) {
-          final folderA = _extractRelativeSubfolder(a.folderUri, a.filePath);
-          final folderB = _extractRelativeSubfolder(b.folderUri, b.filePath);
+          final folderA = extractRelativeSubfolder(a.folderUri, a.filePath);
+          final folderB = extractRelativeSubfolder(b.folderUri, b.filePath);
           final folderCompare = folderA.compareTo(folderB);
           if (folderCompare != 0) return folderCompare;
           return a.title.compareTo(b.title);
@@ -183,7 +183,7 @@ class SongsState {
     return result;
   }
 
-  static String _extractRelativeSubfolder(String? folderUri, String? filePath) {
+  static String extractRelativeSubfolder(String? folderUri, String? filePath) {
     if (filePath == null || filePath.isEmpty) return '';
 
     String rootId = '';
@@ -228,6 +228,22 @@ class SongsState {
       return '';
     }
 
+    // When rootId is in Android's "storage:path" format (e.g. "primary:Music")
+    // and fileDocPath is a filesystem path (e.g. "/storage/emulated/0/Music/..."),
+    // resolve the tree ID to a filesystem prefix and try matching again.
+    if (rootId.isNotEmpty && fileDocPath.startsWith('/')) {
+      final fsRoot = _treeIdToFilesystemPath(rootId);
+      if (fsRoot != null && fileDocPath.startsWith(fsRoot)) {
+        var relative = fileDocPath.substring(fsRoot.length);
+        if (relative.startsWith('/')) relative = relative.substring(1);
+        final lastSlash = relative.lastIndexOf('/');
+        if (lastSlash > 0) {
+          return relative.substring(0, lastSlash);
+        }
+        return '';
+      }
+    }
+
     final lastSlash = fileDocPath.lastIndexOf('/');
     if (lastSlash > 0) {
       return fileDocPath.substring(0, lastSlash);
@@ -235,8 +251,30 @@ class SongsState {
     return '';
   }
 
+  /// Convert an Android SAF tree ID (e.g. "primary:Music", "1A2B-3C4D:FLAC")
+  /// to a filesystem path prefix (e.g. "/storage/emulated/0/Music",
+  /// "/storage/1A2B-3C4D/FLAC").
+  static String? _treeIdToFilesystemPath(String treeId) {
+    final colonIdx = treeId.indexOf(':');
+    if (colonIdx < 0) return null;
+
+    final storage = treeId.substring(0, colonIdx);
+    final subPath = treeId.substring(colonIdx + 1);
+
+    String storageRoot;
+    if (storage.toLowerCase() == 'primary') {
+      storageRoot = '/storage/emulated/0';
+    } else {
+      // External SD card or USB — volume ID is the directory name
+      storageRoot = '/storage/$storage';
+    }
+
+    if (subPath.isEmpty) return storageRoot;
+    return '$storageRoot/$subPath';
+  }
+
   static String folderDisplayName(String? folderUri, String? filePath) {
-    final subfolder = _extractRelativeSubfolder(folderUri, filePath);
+    final subfolder = extractRelativeSubfolder(folderUri, filePath);
     if (subfolder.isNotEmpty) {
       final parts = subfolder.split('/').where((p) => p.isNotEmpty).toList();
       return parts.isNotEmpty ? parts.last : subfolder;
@@ -275,7 +313,7 @@ class SongsState {
 
     final groups = <String, FolderGroup>{};
     for (final song in result) {
-      final subfolder = _extractRelativeSubfolder(song.folderUri, song.filePath);
+      final subfolder = extractRelativeSubfolder(song.folderUri, song.filePath);
       final key = subfolder.isEmpty ? (song.folderUri ?? '__root__') : subfolder;
       final displayName = subfolder.isEmpty
           ? folderDisplayName(song.folderUri, song.filePath)
