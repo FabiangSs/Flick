@@ -29,6 +29,9 @@ class SongCard extends StatefulWidget {
   /// Callback when the card is swiped right.
   final VoidCallback? onSwipeRight;
 
+  /// Whether swipe-to-queue and swipe-to-favorite gestures are enabled.
+  final bool swipeActionsEnabled;
+
   const SongCard({
     super.key,
     required this.song,
@@ -38,6 +41,7 @@ class SongCard extends StatefulWidget {
     this.onTap,
     this.onSwipeLeft,
     this.onSwipeRight,
+    this.swipeActionsEnabled = false,
   });
 
   @override
@@ -66,62 +70,69 @@ class _SongCardState extends State<SongCard> {
           AppHaptics.tap();
           widget.onTap?.call();
         },
-        onHorizontalDragUpdate: (details) {
-          final nextDx = (_dragDx + details.delta.dx).clamp(-120.0, 120.0);
-          if (nextDx != _dragDx) {
-            setState(() {
-              _dragDx = nextDx;
-            });
-          }
-        },
-        onHorizontalDragEnd: (details) async {
-          final shouldFavorite =
-              _dragDx >= 80 ||
-              (details.primaryVelocity != null &&
-                  details.primaryVelocity! > 400);
-          final shouldQueue =
-              _dragDx <= -80 ||
-              (details.primaryVelocity != null &&
-                  details.primaryVelocity! < -400);
-          if (shouldFavorite) {
-            AppHaptics.confirm();
-            setState(() {
-              _dragDx = 0;
-              _favoriteFlash = true;
-            });
-            widget.onSwipeRight?.call();
-            await Future<void>.delayed(const Duration(milliseconds: 180));
-            if (!mounted) return;
-            setState(() {
-              _favoriteFlash = false;
-            });
-            return;
-          }
-          if (shouldQueue) {
-            AppHaptics.confirm();
-            setState(() {
-              _dragDx = 0;
-              _queuedFlash = true;
-            });
-            widget.onSwipeLeft?.call();
-            await Future<void>.delayed(const Duration(milliseconds: 180));
-            if (!mounted) return;
-            setState(() {
-              _queuedFlash = false;
-            });
-            return;
-          }
-          setState(() {
-            _dragDx = 0;
-          });
-        },
-        onHorizontalDragCancel: () {
-          if (_dragDx != 0) {
-            setState(() {
-              _dragDx = 0;
-            });
-          }
-        },
+        onHorizontalDragUpdate: widget.swipeActionsEnabled
+            ? (details) {
+                final nextDx =
+                    (_dragDx + details.delta.dx).clamp(-120.0, 120.0);
+                if (nextDx != _dragDx) {
+                  setState(() {
+                    _dragDx = nextDx;
+                  });
+                }
+              }
+            : null,
+        onHorizontalDragEnd: widget.swipeActionsEnabled
+            ? (details) async {
+                final shouldFavorite =
+                    _dragDx >= 80 ||
+                    (details.primaryVelocity != null &&
+                        details.primaryVelocity! > 400);
+                final shouldQueue =
+                    _dragDx <= -80 ||
+                    (details.primaryVelocity != null &&
+                        details.primaryVelocity! < -400);
+                if (shouldFavorite) {
+                  AppHaptics.confirm();
+                  setState(() {
+                    _dragDx = 0;
+                    _favoriteFlash = true;
+                  });
+                  widget.onSwipeRight?.call();
+                  await Future<void>.delayed(const Duration(milliseconds: 180));
+                  if (!mounted) return;
+                  setState(() {
+                    _favoriteFlash = false;
+                  });
+                  return;
+                }
+                if (shouldQueue) {
+                  AppHaptics.confirm();
+                  setState(() {
+                    _dragDx = 0;
+                    _queuedFlash = true;
+                  });
+                  widget.onSwipeLeft?.call();
+                  await Future<void>.delayed(const Duration(milliseconds: 180));
+                  if (!mounted) return;
+                  setState(() {
+                    _queuedFlash = false;
+                  });
+                  return;
+                }
+                setState(() {
+                  _dragDx = 0;
+                });
+              }
+            : null,
+        onHorizontalDragCancel: widget.swipeActionsEnabled
+            ? () {
+                if (_dragDx != 0) {
+                  setState(() {
+                    _dragDx = 0;
+                  });
+                }
+              }
+            : null,
         child: AnimatedOpacity(
           duration: AppConstants.animationNormal,
           opacity: widget.opacity,
