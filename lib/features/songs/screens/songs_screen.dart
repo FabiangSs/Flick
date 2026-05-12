@@ -1,4 +1,4 @@
-  import 'dart:async';
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -72,6 +72,8 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     final songsAsync = ref.watch(songsProvider);
     final viewMode = ref.watch(songsViewModeProvider);
     final navBarVisible = ref.watch(navBarVisibleProvider);
+    final swipeActionsEnabled =
+        ref.watch(appPreferencesProvider).swipeActionsEnabled;
 
     final shouldReserveOrbitBottomSpace =
         viewMode != SongViewMode.list && navBarVisible;
@@ -198,12 +200,12 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
                           if (filteredGroups.isEmpty) {
                             return _buildNoSearchResultsState();
                           }
-                          return _buildFolderListView(filteredGroups);
+                          return _buildFolderListView(filteredGroups, swipeActionsEnabled);
                         }
                         if (folderGroups.isEmpty) {
                           return _buildEmptyState();
                         }
-                        return _buildFolderListView(folderGroups);
+                        return _buildFolderListView(folderGroups, swipeActionsEnabled);
                       }
 
                       _alignCurrentSongAfterSongsLoad(songs);
@@ -225,6 +227,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
                         viewMode,
                         tokenToIndexMap,
                         navBarVisible,
+                        swipeActionsEnabled,
                       );
                     },
                   ),
@@ -252,10 +255,11 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     SongViewMode viewMode,
     Map<String, int> tokenToIndexMap,
     bool isBottomBarVisible,
+    bool swipeActionsEnabled,
   ) {
     final content = viewMode == SongViewMode.list
-        ? _buildListView(songs)
-        : _buildOrbitView(songs);
+        ? _buildListView(songs, swipeActionsEnabled)
+        : _buildOrbitView(songs, swipeActionsEnabled);
 
     if (tokenToIndexMap.isEmpty) {
       return content;
@@ -316,7 +320,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     );
   }
 
-  Widget _buildOrbitView(List<Song> songs) {
+  Widget _buildOrbitView(List<Song> songs, bool swipeActionsEnabled) {
     return GestureDetector(
       onLongPress: () {
         if (songs.isNotEmpty && _selectedIndex < songs.length) {
@@ -327,6 +331,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
         controller: _orbitScrollController,
         songs: songs,
         selectedIndex: _selectedIndex.clamp(0, songs.length - 1).toInt(),
+        swipeActionsEnabled: swipeActionsEnabled,
         onSelectedIndexChanged: (index) {
           if (!mounted) return;
           setState(() {
@@ -347,7 +352,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     );
   }
 
-  Widget _buildListView(List<Song> songs) {
+  Widget _buildListView(List<Song> songs, bool swipeActionsEnabled) {
     return ListView.builder(
       controller: _listScrollController,
       itemExtent: _listItemExtent,
@@ -367,6 +372,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
           key: ValueKey(song.id),
           padding: const EdgeInsets.only(bottom: AppConstants.spacingSm),
           child: _QueueSwipeListItem(
+            swipeActionsEnabled: swipeActionsEnabled,
             onQueued: () async {
               await _queueSong(song);
             },
@@ -393,7 +399,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     );
   }
 
-  Widget _buildFolderListView(List<FolderGroup> folders) {
+  Widget _buildFolderListView(List<FolderGroup> folders, bool swipeActionsEnabled) {
     final items = <_FolderListItem>[];
     for (final folder in folders) {
       items.add(_FolderListItem.header(folder));
@@ -445,6 +451,7 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
               bottom: AppConstants.spacingSm,
             ),
             child: _QueueSwipeListItem(
+              swipeActionsEnabled: swipeActionsEnabled,
               onQueued: () async {
                 await _queueSong(song);
               },
@@ -746,10 +753,11 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     }());
     _showSongActionSnackBar(
       'Added "${song.title}" to favorites',
-      onUndo: () => ref.read(favoritesServiceProvider).removeFavorite(song.id).then((_) {
-        ref.invalidate(favoritesProvider);
-        PlayerService().refreshNotificationState();
-      }),
+      onUndo: () =>
+          ref.read(favoritesServiceProvider).removeFavorite(song.id).then((_) {
+            ref.invalidate(favoritesProvider);
+            PlayerService().refreshNotificationState();
+          }),
     );
   }
 
@@ -943,7 +951,9 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
                         });
                       },
                       onFilterChanged: (filter) {
-                        ref.read(songsProvider.notifier).setFileTypeFilter(filter);
+                        ref
+                            .read(songsProvider.notifier)
+                            .setFileTypeFilter(filter);
                         setState(() {
                           _selectedIndex = 0;
                           _lastSyncedSong = null;
@@ -1032,11 +1042,13 @@ class _QueueSwipeListItem extends StatefulWidget {
   final Widget child;
   final Future<void> Function() onQueued;
   final Future<void> Function() onFavorited;
+  final bool swipeActionsEnabled;
 
   const _QueueSwipeListItem({
     required this.child,
     required this.onQueued,
     required this.onFavorited,
+    this.swipeActionsEnabled = false,
   });
 
   @override
@@ -1177,6 +1189,8 @@ class _QueueSwipeListItemState extends State<_QueueSwipeListItem> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.swipeActionsEnabled) return widget.child;
+
     final queueRevealProgress = (-_dragDx / 120).clamp(0.0, 1.0);
     final favoriteRevealProgress = (_dragDx / 120).clamp(0.0, 1.0);
 
@@ -1350,12 +1364,9 @@ class _FolderListItem {
   final Song? song;
   final bool isHeader;
 
-  _FolderListItem.header(this.folder)
-      : song = null,
-        isHeader = true;
+  _FolderListItem.header(this.folder) : song = null, isHeader = true;
 
-  _FolderListItem.song(this.folder, this.song)
-      : isHeader = false;
+  _FolderListItem.song(this.folder, this.song) : isHeader = false;
 }
 
 class _FolderHeader extends StatelessWidget {
@@ -1459,7 +1470,9 @@ class _FolderHeader extends StatelessWidget {
                     child: Container(
                       padding: playButtonPadding,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+                        borderRadius: BorderRadius.circular(
+                          AppConstants.radiusMd,
+                        ),
                         border: Border.all(
                           color: AppColors.accent.withValues(alpha: 0.4),
                         ),
@@ -1475,10 +1488,11 @@ class _FolderHeader extends StatelessWidget {
                           SizedBox(width: context.responsiveSpacing(4)),
                           Text(
                             'Play all',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: AppColors.accent,
+                                  fontWeight: FontWeight.w600,
+                                ),
                           ),
                         ],
                       ),
