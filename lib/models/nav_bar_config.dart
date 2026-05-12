@@ -20,17 +20,17 @@ enum NavBarButton {
 }
 
 class NavBarConfig {
-  final Set<NavBarButton> enabledButtons;
+  final List<NavBarButton> enabledButtons;
   final double barSizeFactor;
   final double buttonSpacingFactor;
   final double iconSizeFactor;
   final bool showLabels;
 
-  static const allButtons = {
+  static const allButtons = [
     NavBarButton.menu,
     NavBarButton.songs,
     NavBarButton.settings,
-  };
+  ];
 
   const NavBarConfig({
     this.enabledButtons = allButtons,
@@ -42,11 +42,7 @@ class NavBarConfig {
 
   static const defaultConfig = NavBarConfig();
 
-  /// Ordered list of enabled buttons in their natural [pageIndex] order.
-  List<NavBarButton> get orderedButtons {
-    final sorted = enabledButtons.toList()..sort((a, b) => a.pageIndex.compareTo(b.pageIndex));
-    return sorted;
-  }
+  List<NavBarButton> get orderedButtons => enabledButtons;
 
   bool get hasAllEssential =>
       enabledButtons.contains(NavBarButton.menu) &&
@@ -59,8 +55,16 @@ class NavBarConfig {
       ..sort((a, b) => a.pageIndex.compareTo(b.pageIndex));
   }
 
+  NavBarConfig reorder(int oldIndex, int newIndex) {
+    final list = List<NavBarButton>.from(enabledButtons);
+    if (oldIndex < newIndex) newIndex -= 1;
+    final item = list.removeAt(oldIndex);
+    list.insert(newIndex, item);
+    return copyWith(enabledButtons: list);
+  }
+
   NavBarConfig copyWith({
-    Set<NavBarButton>? enabledButtons,
+    List<NavBarButton>? enabledButtons,
     double? barSizeFactor,
     double? buttonSpacingFactor,
     double? iconSizeFactor,
