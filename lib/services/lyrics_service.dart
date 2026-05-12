@@ -206,7 +206,8 @@ class LyricsService {
         .replaceFirst(RegExp(r'^\uFEFF'), '');
     final rows = normalized.split('\n');
 
-    final timestampPattern = RegExp(r'\[(\d{1,2}:\d{2}(?:[.:]\d{1,3})?)\]');
+    final timestampPattern = RegExp(r'\[(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?)\]');
+    final wordTimestampPattern = RegExp(r'<(\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?)>');
     final offsetPattern = RegExp(
       r'^\s*\[offset:([+-]?\d+)\]\s*$',
       caseSensitive: false,
@@ -230,7 +231,10 @@ class LyricsService {
       final matches = timestampPattern.allMatches(line).toList();
       if (matches.isNotEmpty) {
         hasTimestamps = true;
-        final lyricText = line.replaceAll(timestampPattern, '').trim();
+        final lyricText = line
+            .replaceAll(timestampPattern, '')
+            .replaceAll(wordTimestampPattern, '')
+            .trim();
         for (final match in matches) {
           final parsedTime = _parseTimestamp(match.group(1) ?? '');
           if (parsedTime == null) continue;
@@ -316,28 +320,44 @@ class LyricsService {
   }
 
   Duration? _parseTimestamp(String timestamp) {
-    final match = RegExp(
-      r'^(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?$',
-    ).firstMatch(timestamp.trim());
+    final trimmed = timestamp.trim();
+
+    var match = RegExp(
+      r'^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$',
+    ).firstMatch(trimmed);
+    if (match != null) {
+      final hours = int.tryParse(match.group(1) ?? '') ?? 0;
+      final minutes = int.tryParse(match.group(2) ?? '') ?? 0;
+      final seconds = int.tryParse(match.group(3) ?? '') ?? 0;
+      return Duration(
+        hours: hours,
+        minutes: minutes,
+        seconds: seconds,
+        milliseconds: _parseFraction(match.group(4)),
+      );
+    }
+
+    match = RegExp(
+      r'^(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?$',
+    ).firstMatch(trimmed);
     if (match == null) return null;
 
     final minutes = int.tryParse(match.group(1) ?? '');
     final seconds = int.tryParse(match.group(2) ?? '');
     if (minutes == null || seconds == null) return null;
 
-    final fractionRaw = match.group(3);
-    var millis = 0;
-    if (fractionRaw != null && fractionRaw.isNotEmpty) {
-      if (fractionRaw.length == 1) {
-        millis = int.parse(fractionRaw) * 100;
-      } else if (fractionRaw.length == 2) {
-        millis = int.parse(fractionRaw) * 10;
-      } else {
-        millis = int.parse(fractionRaw.substring(0, 3));
-      }
-    }
+    return Duration(
+      minutes: minutes,
+      seconds: seconds,
+      milliseconds: _parseFraction(match.group(3)),
+    );
+  }
 
-    return Duration(minutes: minutes, seconds: seconds, milliseconds: millis);
+  int _parseFraction(String? fractionRaw) {
+    if (fractionRaw == null || fractionRaw.isEmpty) return 0;
+    if (fractionRaw.length == 1) return int.parse(fractionRaw) * 100;
+    if (fractionRaw.length == 2) return int.parse(fractionRaw) * 10;
+    return int.parse(fractionRaw.substring(0, 3));
   }
 }
 
