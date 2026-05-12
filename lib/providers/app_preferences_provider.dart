@@ -103,6 +103,12 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
     await ref.read(appPreferencesServiceProvider).setSwipeActionsEnabled(value);
   }
 
+  Future<void> setFavoriteRemovalMode(String value) async {
+    if (state.favoriteRemovalMode == value) return;
+    state = state.copyWith(favoriteRemovalMode: value);
+    await ref.read(appPreferencesServiceProvider).setFavoriteRemovalMode(value);
+  }
+
   Future<void> setFastIndexEnabled(bool value) async {
     if (state.fastIndexEnabled == value) return;
     state = state.copyWith(fastIndexEnabled: value);
