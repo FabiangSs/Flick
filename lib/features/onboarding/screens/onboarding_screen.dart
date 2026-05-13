@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -100,7 +102,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          const Positioned.fill(child: _OnboardingBackdrop()),
+          Positioned.fill(
+            child: _OnboardingBackdrop(pageController: _pageController),
+          ),
           SafeArea(
             child: Column(
               children: [
@@ -274,48 +278,160 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   }
 }
 
-class _OnboardingBackdrop extends StatelessWidget {
-  const _OnboardingBackdrop();
+// ─── Animated Onboarding Backdrop ─────────────────────────────────────────────
+// Each page has a unique arrangement of glowing orbs. As the user swipes,
+// the orbs interpolate smoothly between configurations. A subtle breathing
+// animation keeps the backdrop feeling alive even when idle.
+
+class _OrbState {
+  final double x; // fraction of screen width  (0 = left edge)
+  final double y; // fraction of screen height (0 = top edge)
+  final double size;
+  final Color color;
+
+  const _OrbState(this.x, this.y, this.size, this.color);
+
+  _OrbState lerp(_OrbState other, double t) {
+    return _OrbState(
+      _lerpDouble(x, other.x, t),
+      _lerpDouble(y, other.y, t),
+      _lerpDouble(size, other.size, t),
+      Color.lerp(color, other.color, t) ?? color,
+    );
+  }
+
+  static double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
+}
+
+/// Per-page configurations for 3 orbs.
+const _orbConfigs = <List<_OrbState>>[
+  // Page 0 – Welcome: cool blues, centered
+  [
+    _OrbState(-0.15, -0.10, 340, Color(0xFF1B3258)),
+    _OrbState(0.70, 0.35, 300, Color(0xFF1A2D44)),
+    _OrbState(0.05, 0.82, 240, Color(0xFF1A2D44)),
+  ],
+  // Page 1 – Library: warmer tones appear
+  [
+    _OrbState(0.55, -0.08, 320, Color(0xFF2A1D45)),
+    _OrbState(-0.20, 0.45, 360, Color(0xFF4A2A1F)),
+    _OrbState(0.40, 0.78, 260, Color(0xFF1B3258)),
+  ],
+  // Page 2 – Browse: spread out, purple accent
+  [
+    _OrbState(0.10, 0.05, 280, Color(0xFF3B1D5E)),
+    _OrbState(0.75, 0.50, 320, Color(0xFF1B3258)),
+    _OrbState(-0.10, 0.70, 300, Color(0xFF2A1D45)),
+  ],
+  // Page 3 – Playback: vibrant, tighter
+  [
+    _OrbState(0.60, -0.05, 360, Color(0xFF4A2A1F)),
+    _OrbState(-0.15, 0.40, 280, Color(0xFF3B1D5E)),
+    _OrbState(0.35, 0.85, 320, Color(0xFF1B3258)),
+  ],
+  // Page 4 – All Set: calm, centred glow
+  [
+    _OrbState(0.25, 0.05, 380, Color(0xFF1A2D44)),
+    _OrbState(0.60, 0.45, 340, Color(0xFF1B3258)),
+    _OrbState(0.10, 0.75, 280, Color(0xFF2A1D45)),
+  ],
+];
+
+class _OnboardingBackdrop extends StatefulWidget {
+  final PageController pageController;
+
+  const _OnboardingBackdrop({required this.pageController});
+
+  @override
+  State<_OnboardingBackdrop> createState() => _OnboardingBackdropState();
+}
+
+class _OnboardingBackdropState extends State<_OnboardingBackdrop>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _breathe;
+  double _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _breathe = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat(reverse: true);
+    widget.pageController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    final p = widget.pageController.page;
+    if (p != null && mounted) setState(() => _page = p);
+  }
+
+  @override
+  void dispose() {
+    widget.pageController.removeListener(_onScroll);
+    _breathe.dispose();
+    super.dispose();
+  }
+
+  List<_OrbState> _interpolatedOrbs() {
+    final base = _page.floor().clamp(0, _orbConfigs.length - 1);
+    final next = (base + 1).clamp(0, _orbConfigs.length - 1);
+    final t = _page - _page.floor();
+    return [
+      for (int i = 0; i < 3; i++) _orbConfigs[base][i].lerp(_orbConfigs[next][i], t),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: Stack(
-        children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF040608), Color(0xFF0A0A0A)],
+      child: AnimatedBuilder(
+        animation: _breathe,
+        builder: (context, _) {
+          final orbs = _interpolatedOrbs();
+          final breath = _breathe.value; // 0 → 1 → 0
+          final w = MediaQuery.sizeOf(context).width;
+          final h = MediaQuery.sizeOf(context).height;
+
+          return Stack(
+            children: [
+              // Base gradient
+              const Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xFF040608), Color(0xFF0A0A0A)],
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            top: -140,
-            left: -60,
-            child: _GlowOrb(
-              size: 340,
-              colors: const [Color(0xFF1B3258), Color(0x001B3258)],
-            ),
-          ),
-          Positioned(
-            top: context.screenHeight * 0.32,
-            right: -100,
-            child: _GlowOrb(
-              size: 300,
-              colors: const [Color(0xFF4A2A1F), Color(0x004A2A1F)],
-            ),
-          ),
-          Positioned(
-            bottom: -80,
-            left: 20,
-            child: _GlowOrb(
-              size: 240,
-              colors: const [Color(0xFF1A2D44), Color(0x001A2D44)],
-            ),
-          ),
-        ],
+              // Animated orbs
+              for (int i = 0; i < orbs.length; i++)
+                _buildOrb(orbs[i], i, breath, w, h),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildOrb(_OrbState orb, int index, double breath, double w, double h) {
+    // Each orb breathes with a slightly different phase offset
+    final phase = math.sin((breath + index * 0.33) * math.pi);
+    final sizeScale = 1.0 + phase * 0.08; // ±8% size pulse
+    final offsetX = phase * 12.0 * (index.isEven ? 1 : -1); // subtle drift
+    final offsetY = phase * 8.0 * (index.isOdd ? 1 : -1);
+    final s = orb.size * sizeScale;
+
+    return Positioned(
+      left: orb.x * w + offsetX - s / 2,
+      top: orb.y * h + offsetY - s / 2,
+      child: _GlowOrb(
+        size: s,
+        color: orb.color,
+        opacity: 0.85 + phase * 0.15,
       ),
     );
   }
@@ -393,18 +509,28 @@ class _StepContent extends StatelessWidget {
 
 class _GlowOrb extends StatelessWidget {
   final double size;
-  final List<Color> colors;
+  final Color color;
+  final double opacity;
 
-  const _GlowOrb({required this.size, required this.colors});
+  const _GlowOrb({
+    required this.size,
+    required this.color,
+    this.opacity = 1.0,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(colors: colors),
+    return Opacity(
+      opacity: opacity.clamp(0.0, 1.0),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [color, color.withValues(alpha: 0)],
+          ),
+        ),
       ),
     );
   }
