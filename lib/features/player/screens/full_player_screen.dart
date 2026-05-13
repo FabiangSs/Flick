@@ -2120,9 +2120,9 @@ class _AnimatedSongScene extends StatelessWidget {
                       }
                     },
               child: ValueListenableBuilder<List<Song>>(
-                valueListenable: playerService.queueNotifier,
-                builder: (context, queue, _) {
-                  final hasQueue = queue.isNotEmpty;
+                valueListenable: playerService.upNextNotifier,
+                builder: (context, upNext, _) {
+                  final hasQueue = upNext.isNotEmpty;
                   final fromLocker = song.isFromLocker;
                   final nowPlayingContent = Column(
                     mainAxisSize: MainAxisSize.min,
@@ -2174,7 +2174,7 @@ class _AnimatedSongScene extends StatelessWidget {
                           SizedBox(width: context.responsive(8.0, 10.0, 12.0)),
                           _buildQueueSummaryBadge(
                             context,
-                            count: queue.length,
+                            count: upNext.length,
                             highlighted: hasQueue,
                           ),
                         ],

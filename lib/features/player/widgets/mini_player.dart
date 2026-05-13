@@ -231,11 +231,11 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                       // Controls
                       if (!song.isFromLocker)
                         ValueListenableBuilder<List<Song>>(
-                          valueListenable: _playerService.queueNotifier,
-                          builder: (context, queue, _) {
+                          valueListenable: _playerService.upNextNotifier,
+                          builder: (context, upNext, _) {
                             return Padding(
                               padding: const EdgeInsets.only(right: 4),
-                              child: _buildQueueButton(context, queue.length),
+                              child: _buildQueueButton(context, upNext.length),
                             );
                           },
                         ),
