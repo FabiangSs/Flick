@@ -341,6 +341,8 @@ class PlayerService {
   int _currentIndex = -1;
   bool _isRebuildingPlaylist =
       false; // Flag to prevent unwanted updates during rebuild
+  // ignore: deprecated_member_use
+  just_audio.ConcatenatingAudioSource? _audioSourceSequence;
 
   // Track previous position to detect repeat wrap-around for notification progress
   Duration _lastPosition = Duration.zero;
@@ -557,6 +559,7 @@ class PlayerService {
   }
 
   void _replacePlaybackContext(List<Song> songs) {
+    _audioSourceSequence = null;
     _playlist
       ..clear()
       ..addAll(songs);
@@ -694,8 +697,12 @@ class PlayerService {
       if (playlistIndex < _currentIndex) {
         _setCurrentIndex(_currentIndex - 1);
       }
+      _removeFromAudioSequence(playlistIndex);
     }
-    _debounceQueueChanged();
+    _notifyQueueChanged();
+    if (_usingRustBackend || _audioSourceSequence == null) {
+      _debounceQueueChanged();
+    }
   }
 
   /// Android: current audio session ID from just_audio (for Equalizer attachment).
@@ -1915,8 +1922,12 @@ class PlayerService {
   }
 
   /// Build audio sources for the playlist (gapless playback).
-  Future<List<just_audio.AudioSource>> _buildAudioSources() async {
-    if (_playlist.isEmpty) return const [];
+  // ignore: deprecated_member_use
+  Future<just_audio.ConcatenatingAudioSource> _buildAudioSources() async {
+    if (_playlist.isEmpty) {
+      // ignore: deprecated_member_use
+      return just_audio.ConcatenatingAudioSource(children: const []);
+    }
 
     const batchSize = 12;
     final sources = <just_audio.AudioSource>[];
@@ -1930,7 +1941,9 @@ class PlayerService {
       sources.addAll(resolvedBatch);
     }
 
-    return sources;
+    // ignore: deprecated_member_use
+    _audioSourceSequence = just_audio.ConcatenatingAudioSource(children: sources);
+    return _audioSourceSequence!;
   }
 
   Future<just_audio.AudioSource> _buildAudioSourceForSong(Song song) async {
@@ -1953,6 +1966,19 @@ class PlayerService {
     }
 
     return just_audio.AudioSource.uri(uri);
+  }
+
+  Future<void> _insertIntoAudioSequence(int playlistIndex, Song song) async {
+    if (_usingRustBackend || _audioSourceSequence == null) return;
+    final source = await _buildAudioSourceForSong(song);
+    _audioSourceSequence!.insert(playlistIndex, source);
+  }
+
+  void _removeFromAudioSequence(int playlistIndex) {
+    if (_usingRustBackend || _audioSourceSequence == null) return;
+    if (playlistIndex < _audioSourceSequence!.children.length) {
+      _audioSourceSequence!.removeAt(playlistIndex);
+    }
   }
 
   Future<Uri> _resolvePlaybackUri(Song song) async {
@@ -2503,6 +2529,7 @@ class PlayerService {
     await player.dispose();
     await _deactivateAndroidAudioSession();
     _justAudioPlayer = null;
+    _audioSourceSequence = null;
   }
 
   Future<void> _disposeUsbEngine() async {
@@ -3330,11 +3357,12 @@ class PlayerService {
       final wasPlaying = isPlayingNotifier.value;
       final currentPosition = positionNotifier.value;
 
-      final sources = await _buildAudioSources();
+      final source = await _buildAudioSources();
+      _audioSourceSequence = source;
 
       await _runWithSuppressedSequenceStateUpdates(() async {
-        await player.setAudioSources(
-          sources,
+        await player.setAudioSource(
+          _audioSourceSequence!,
           initialIndex: _currentIndex,
           preload: true,
         );
@@ -3471,8 +3499,17 @@ class PlayerService {
       );
       _playlist.insert(insertIndex, song);
       _playlistQueueEntryIds.insert(insertIndex, entry.id);
+
+      if (!_usingRustBackend && _audioSourceSequence != null) {
+        await _insertIntoAudioSequence(insertIndex, song);
+      }
     }
-    _debounceQueueChanged();
+    _notifyQueueChanged();
+    if (!_playlist.isNotEmpty ||
+        _usingRustBackend ||
+        _audioSourceSequence == null) {
+      _debounceQueueChanged();
+    }
     return index;
   }
 
