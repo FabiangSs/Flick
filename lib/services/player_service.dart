@@ -575,7 +575,19 @@ class PlayerService {
     _playlistQueueEntryIds
       ..clear()
       ..addAll(List<int?>.filled(songs.length, null));
+    _queuedEntries.clear();
+    _notifyQueueChanged();
     _notifyUpNextChanged();
+  }
+
+  List<String> _playlistNonQueueIds() {
+    final ids = <String>[];
+    for (var i = 0; i < _playlist.length; i++) {
+      if (_playlistQueueEntryIds[i] == null) {
+        ids.add(_playlist[i].id);
+      }
+    }
+    return ids;
   }
 
   void syncAlbumArtPaths({
@@ -2922,7 +2934,6 @@ class PlayerService {
         if (existingIndex == -1) {
           _replacePlaybackContext([song]);
           _setCurrentIndex(0);
-          _insertQueuedEntriesAfterCurrent();
         } else {
           _setCurrentIndex(existingIndex);
         }
@@ -3012,7 +3023,7 @@ class PlayerService {
       await _lastPlayedService.saveLastPlayed(
         persistedSong.id,
         position ?? positionNotifier.value,
-        playlistSongIds: _playlist.map((s) => s.id).toList(),
+        playlistSongIds: _playlistNonQueueIds(),
         currentIndex: _currentIndex,
         wasPlaying: isPlayingNotifier.value,
       );
@@ -3621,6 +3632,50 @@ class PlayerService {
     _queuedEntries.clear();
     _notifyUpNextChanged();
     _debounceQueueChanged();
+  }
+
+  /// Clears everything after the current song: both manual queue entries
+  /// and all upcoming playlist items.
+  Future<void> clearAllUpcoming() async {
+    // First clear manual queue entries
+    _queuedEntries.clear();
+
+    // Then remove everything after the current index from the playlist
+    if (_playlist.isNotEmpty && _currentIndex >= 0) {
+      final keepCount = (_currentIndex + 1).clamp(0, _playlist.length);
+      if (keepCount < _playlist.length) {
+        _playlist.removeRange(keepCount, _playlist.length);
+        _playlistQueueEntryIds.removeRange(
+            keepCount, _playlistQueueEntryIds.length);
+      }
+    }
+
+    _notifyQueueChanged();
+    _notifyUpNextChanged();
+    _debounceQueueChanged();
+  }
+
+  /// Removes a single song from the up-next list by its upNext-relative index.
+  /// Index 0 is the first song after the currently playing song.
+  Future<void> removeFromUpNext(int upNextIndex) async {
+    final playlistIndex = _currentIndex + 1 + upNextIndex;
+    if (playlistIndex < 0 || playlistIndex >= _playlist.length) return;
+
+    // If this playlist slot belongs to a manual queue entry, remove that too
+    final queueEntryId = _playlistQueueEntryIds[playlistIndex];
+    if (queueEntryId != null) {
+      _queuedEntries.removeWhere((entry) => entry.id == queueEntryId);
+      _notifyQueueChanged();
+    }
+
+    _playlist.removeAt(playlistIndex);
+    _playlistQueueEntryIds.removeAt(playlistIndex);
+    _removeFromAudioSequence(playlistIndex);
+
+    _notifyUpNextChanged();
+    if (_usingRustBackend || _audioSourceSequence == null) {
+      _debounceQueueChanged();
+    }
   }
 
   Future<void> removeFromQueue(int index) async {

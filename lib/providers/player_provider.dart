@@ -367,6 +367,14 @@ class PlayerNotifier extends Notifier<PlayerState> {
     await _service.moveQueueItemToNext(index);
   }
 
+  Future<void> clearAllUpcoming() async {
+    await _service.clearAllUpcoming();
+  }
+
+  Future<void> removeFromUpNext(int upNextIndex) async {
+    await _service.removeFromUpNext(upNextIndex);
+  }
+
   /// Toggle loop mode.
   void toggleLoopMode() {
     unawaited(_service.toggleLoopMode());
