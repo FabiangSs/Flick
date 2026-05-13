@@ -36,10 +36,13 @@ class SongsScreen extends ConsumerStatefulWidget {
 
 class _SongsScreenState extends ConsumerState<SongsScreen> {
   static const double _listItemExtent = 80;
+  static const int _folderGridPageSize = 18;
+  static const double _folderGridLoadMoreThreshold = 320;
 
   int _selectedIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _listScrollController = ScrollController();
+  final ScrollController _folderGridScrollController = ScrollController();
   final OrbitScrollController _orbitScrollController = OrbitScrollController();
   String _searchQuery = '';
   List<Song> _cachedSongs = [];
@@ -49,6 +52,11 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
   bool _alignedCurrentSongAfterLoad = false;
   Timer? _fastIndexTimer;
   bool _fastIndexVisible = true;
+  int _visibleFolderCount = _folderGridPageSize;
+  int _totalFolderCount = 0;
+  String _folderPaginationSignature = '';
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = {};
 
   @override
   void initState() {
@@ -60,13 +68,16 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
       _syncInterfaceToCurrentSong(next);
     });
     _listScrollController.addListener(_onListScroll);
+    _folderGridScrollController.addListener(_onFolderGridScroll);
   }
 
   @override
   void dispose() {
     _currentSongSubscription.close();
     _listScrollController.removeListener(_onListScroll);
+    _folderGridScrollController.removeListener(_onFolderGridScroll);
     _listScrollController.dispose();
+    _folderGridScrollController.dispose();
     _searchController.dispose();
     _fastIndexTimer?.cancel();
     super.dispose();
@@ -77,10 +88,13 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     final songsAsync = ref.watch(songsProvider);
     final viewMode = ref.watch(songsViewModeProvider);
     final navBarVisible = ref.watch(navBarVisibleProvider);
-    final swipeActionsEnabled =
-        ref.watch(appPreferencesProvider).swipeActionsEnabled;
+    final swipeActionsEnabled = ref
+        .watch(appPreferencesProvider)
+        .swipeActionsEnabled;
     final navBarConfig = ref.watch(navBarConfigProvider);
-    final searchInNavBar = navBarConfig.orderedButtons.contains(NavBarButton.search);
+    final searchInNavBar = navBarConfig.orderedButtons.contains(
+      NavBarButton.search,
+    );
 
     final sortOption =
         songsAsync.value?.sortOption ?? SongSortOption.albumArtist;
@@ -101,7 +115,24 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
             child: Column(
               children: [
                 // Header with sort option
-                _buildHeader(songsAsync),
+                AnimatedSwitcher(
+                  duration: AppConstants.animationNormal,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                  child: _selectionMode
+                      ? KeyedSubtree(
+                          key: const ValueKey('selection_header'),
+                          child: _buildSelectionHeader(),
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('normal_header'),
+                          child: _buildHeader(songsAsync),
+                        ),
+                ),
 
                 // Search Bar (hidden when Search tab is in the nav bar)
                 if (!searchInNavBar) ...[
@@ -347,15 +378,22 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
   Widget _buildOrbitView(List<Song> songs, bool swipeActionsEnabled) {
     return GestureDetector(
       onLongPress: () {
+        if (_selectionMode) return;
         if (songs.isNotEmpty && _selectedIndex < songs.length) {
-          SongActionsBottomSheet.show(context, songs[_selectedIndex]);
+          SongActionsBottomSheet.show(
+            context,
+            songs[_selectedIndex],
+            onSelect: () => _enterSelectionMode(songs[_selectedIndex].id),
+          );
         }
       },
       child: OrbitScroll(
         controller: _orbitScrollController,
         songs: songs,
         selectedIndex: _selectedIndex.clamp(0, songs.length - 1).toInt(),
-        swipeActionsEnabled: swipeActionsEnabled,
+        swipeActionsEnabled: swipeActionsEnabled && !_selectionMode,
+        isSelectionMode: _selectionMode,
+        selectedIds: _selectedIds,
         onSelectedIndexChanged: (index) {
           if (!mounted) return;
           _showFastIndexOverlay();
@@ -365,6 +403,10 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
           _syncSelectedTokenForIndex(songs, index);
         },
         onSongSelected: (index) async {
+          if (_selectionMode) {
+            _toggleSelection(songs[index].id);
+            return;
+          }
           await _playSongAndOpenPlayer(songs: songs, index: index);
         },
         onSongSwipedLeft: (index) async {
@@ -401,63 +443,116 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
         ),
         itemCount: songs.length,
         itemBuilder: (context, index) {
-        final song = songs[index];
-        final isSelected = index == _selectedIndex;
+          final song = songs[index];
+          final isSelected = index == _selectedIndex;
+          final isMultiSelected = _selectedIds.contains(song.id);
 
-        return Padding(
-          key: ValueKey(song.id),
-          padding: const EdgeInsets.only(bottom: AppConstants.spacingSm),
-          child: _QueueSwipeListItem(
-            swipeActionsEnabled: swipeActionsEnabled,
-            onQueued: () async {
-              await _queueSong(song);
-            },
-            onFavorited: () async {
-              await _favoriteSong(song);
-            },
-            child: _SongListTile(
-              song: song,
-              isSelected: isSelected,
-              onTap: () async {
-                setState(() {
-                  _selectedIndex = index;
-                });
-                _syncSelectedTokenForIndex(songs, index);
-                await _playSongAndOpenPlayer(songs: songs, index: index);
+          return Padding(
+            key: ValueKey(song.id),
+            padding: const EdgeInsets.only(bottom: AppConstants.spacingSm),
+            child: _QueueSwipeListItem(
+              swipeActionsEnabled: swipeActionsEnabled && !_selectionMode,
+              onQueued: () async {
+                await _queueSong(song);
               },
-              onLongPress: () {
-                SongActionsBottomSheet.show(context, song);
+              onFavorited: () async {
+                await _favoriteSong(song);
               },
+              child: _SongListTile(
+                song: song,
+                isSelected: isSelected,
+                isSelectionMode: _selectionMode,
+                isMultiSelected: isMultiSelected,
+                onTap: () async {
+                  if (_selectionMode) {
+                    _toggleSelection(song.id);
+                    return;
+                  }
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                  _syncSelectedTokenForIndex(songs, index);
+                  await _playSongAndOpenPlayer(songs: songs, index: index);
+                },
+                onLongPress: () {
+                  if (_selectionMode) {
+                    _toggleSelection(song.id);
+                  } else {
+                    SongActionsBottomSheet.show(
+                      context,
+                      song,
+                      onSelect: () => _enterSelectionMode(song.id),
+                    );
+                  }
+                },
+              ),
             ),
-          ),
-        );
-      },
-    ),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildFolderGridView(List<FolderGroup> folders) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        AppConstants.spacingLg,
-        0,
-        AppConstants.spacingLg,
-        AppConstants.navBarHeight + 120,
-      ),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: context.gridColumns(compact: 2, phone: 2, tablet: 3),
-        childAspectRatio: 0.78,
-        crossAxisSpacing: AppConstants.spacingMd,
-        mainAxisSpacing: AppConstants.spacingLg,
-      ),
-      itemCount: folders.length,
-      itemBuilder: (context, index) {
-        final folder = folders[index];
-        return _FolderCard(
-          folder: folder,
-          onTap: () => _openFolderDetail(folder),
-        );
-      },
+    _syncFolderPagination(folders);
+
+    final visibleCount = min(_visibleFolderCount, folders.length);
+    final visibleFolders = folders.take(visibleCount).toList(growable: false);
+    final hasMore = visibleCount < folders.length;
+
+    return CustomScrollView(
+      controller: _folderGridScrollController,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppConstants.spacingLg,
+            0,
+            AppConstants.spacingLg,
+            AppConstants.spacingLg,
+          ),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: context.gridColumns(
+                compact: 2,
+                phone: 2,
+                tablet: 3,
+              ),
+              childAspectRatio: 0.78,
+              crossAxisSpacing: AppConstants.spacingMd,
+              mainAxisSpacing: AppConstants.spacingLg,
+            ),
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final folder = visibleFolders[index];
+              return _FolderCard(
+                folder: folder,
+                onTap: () => _openFolderDetail(folder),
+              );
+            }, childCount: visibleFolders.length),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppConstants.spacingLg,
+              0,
+              AppConstants.spacingLg,
+              AppConstants.navBarHeight + 120,
+            ),
+            child: hasMore
+                ? _FolderLoadMoreIndicator(
+                    visibleCount: visibleCount,
+                    totalCount: folders.length,
+                  )
+                : visibleCount > _folderGridPageSize
+                ? _FolderLoadMoreIndicator(
+                    visibleCount: visibleCount,
+                    totalCount: folders.length,
+                    isComplete: true,
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -473,8 +568,10 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
           const begin = Offset(0.0, 0.05);
           const end = Offset.zero;
           const curve = Curves.easeOutCubic;
-          final tween = Tween(begin: begin, end: end)
-              .chain(CurveTween(curve: curve));
+          final tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
           return SlideTransition(
             position: animation.drive(tween),
             child: child,
@@ -484,6 +581,36 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
         opaque: true,
       ),
     );
+  }
+
+  void _syncFolderPagination(List<FolderGroup> folders) {
+    final totalSongCount = folders.fold<int>(
+      0,
+      (sum, folder) => sum + folder.songs.length,
+    );
+    final signature =
+        '$_searchQuery|${folders.length}|$totalSongCount|${folders.isNotEmpty ? folders.first.key : ''}|${folders.isNotEmpty ? folders.last.key : ''}';
+
+    _totalFolderCount = folders.length;
+
+    if (_folderPaginationSignature != signature) {
+      _folderPaginationSignature = signature;
+      _visibleFolderCount = min(_folderGridPageSize, folders.length);
+
+      if (_folderGridScrollController.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_folderGridScrollController.hasClients) return;
+          _folderGridScrollController.jumpTo(0);
+        });
+      }
+      return;
+    }
+
+    if (_visibleFolderCount > folders.length) {
+      _visibleFolderCount = folders.length;
+    } else if (_visibleFolderCount == 0 && folders.isNotEmpty) {
+      _visibleFolderCount = min(_folderGridPageSize, folders.length);
+    }
   }
 
   Map<String, int> _buildFastIndexMap(List<Song> songs) {
@@ -737,13 +864,36 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
     _showFastIndexOverlay();
   }
 
+  void _onFolderGridScroll() {
+    if (!_folderGridScrollController.hasClients) return;
+
+    final position = _folderGridScrollController.position;
+    if (position.pixels >=
+        position.maxScrollExtent - _folderGridLoadMoreThreshold) {
+      _loadMoreFolders();
+    }
+  }
+
+  void _loadMoreFolders() {
+    if (!mounted || _visibleFolderCount >= _totalFolderCount) {
+      return;
+    }
+
+    setState(() {
+      _visibleFolderCount = min(
+        _visibleFolderCount + _folderGridPageSize,
+        _totalFolderCount,
+      );
+    });
+  }
+
   Future<void> _playSongAndOpenPlayer({
     required List<Song> songs,
     required int index,
   }) async {
-    // Use the sorted songs list so next/previous follows the current sort order
+    // Play just the selected song — no playlist context so the queue stays empty
     final songToPlay = songs[index];
-    await ref.read(playerProvider.notifier).play(songToPlay, playlist: songs);
+    await ref.read(playerProvider.notifier).play(songToPlay);
 
     if (!mounted) return;
 
@@ -791,6 +941,76 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
             PlayerService().refreshNotificationState();
           }),
     );
+  }
+
+  void _enterSelectionMode(String? songId) {
+    setState(() {
+      _selectionMode = true;
+      if (songId != null) _selectedIds.add(songId);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelection(String songId) {
+    setState(() {
+      if (_selectedIds.contains(songId)) {
+        _selectedIds.remove(songId);
+        if (_selectedIds.isEmpty) _selectionMode = false;
+      } else {
+        _selectedIds.add(songId);
+      }
+    });
+  }
+
+  void _selectAll(List<Song> songs) {
+    setState(() {
+      _selectedIds.addAll(songs.map((s) => s.id));
+    });
+  }
+
+  Future<void> _queueSelected() async {
+    final toQueue = _cachedDisplaySongs
+        .where((s) => _selectedIds.contains(s.id))
+        .toList();
+    for (final song in toQueue) {
+      await ref.read(playerProvider.notifier).addToQueue(song);
+    }
+    if (mounted) {
+      _showSongActionSnackBar('Queued ${toQueue.length} songs');
+      _exitSelectionMode();
+    }
+  }
+
+  Future<void> _favoriteSelected() async {
+    final toFavorite = _cachedDisplaySongs
+        .where((s) => _selectedIds.contains(s.id))
+        .toList();
+    for (final song in toFavorite) {
+      try {
+        await ref.read(favoritesServiceProvider).addFavorite(song.id);
+      } catch (_) {}
+    }
+    ref.invalidate(favoritesProvider);
+    PlayerService().refreshNotificationState();
+    if (mounted) {
+      _showSongActionSnackBar(
+        'Added ${toFavorite.length} songs to favorites',
+        onUndo: () async {
+          for (final song in toFavorite) {
+            await ref.read(favoritesServiceProvider).removeFavorite(song.id);
+          }
+          ref.invalidate(favoritesProvider);
+          PlayerService().refreshNotificationState();
+        },
+      );
+      _exitSelectionMode();
+    }
   }
 
   void _showSongActionSnackBar(String message, {VoidCallback? onUndo}) {
@@ -944,6 +1164,12 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
             children: [
               _buildHeaderIconButton(
                 context: context,
+                icon: LucideIcons.checkCheck,
+                onTap: () => _enterSelectionMode(null),
+              ),
+              const SizedBox(width: AppConstants.spacingSm),
+              _buildHeaderIconButton(
+                context: context,
                 icon: LucideIcons.shuffle,
                 onTap: () => _shufflePlayFromLibrary(songsAsync),
               ),
@@ -1001,6 +1227,62 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionHeader() {
+    final count = _selectedIds.length;
+    final allSelected =
+        count == _cachedDisplaySongs.length && _cachedDisplaySongs.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppConstants.spacingMd,
+        vertical: AppConstants.spacingMd,
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(LucideIcons.x),
+            color: context.adaptiveTextPrimary,
+            onPressed: _exitSelectionMode,
+          ),
+          const SizedBox(width: AppConstants.spacingSm),
+          Expanded(
+            child: Text(
+              '$count selected',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: context.adaptiveTextPrimary,
+                  ),
+            ),
+          ),
+          if (!allSelected)
+            TextButton(
+              onPressed: () => _selectAll(_cachedDisplaySongs),
+              child: Text(
+                'Select All',
+                style: TextStyle(color: context.adaptiveTextSecondary),
+              ),
+            ),
+          IconButton(
+            icon: Icon(
+              LucideIcons.listPlus,
+              color: AppColors.accent.withValues(alpha: 0.8),
+            ),
+            onPressed: count > 0 ? () => _queueSelected() : null,
+            tooltip: 'Queue selected',
+          ),
+          IconButton(
+            icon: Icon(
+              LucideIcons.heart,
+              color: Colors.red.withValues(alpha: 0.8),
+            ),
+            onPressed: count > 0 ? () => _favoriteSelected() : null,
+            tooltip: 'Favorite selected',
           ),
         ],
       ),
@@ -1090,12 +1372,16 @@ class _QueueSwipeListItem extends StatefulWidget {
 class _SongListTile extends StatelessWidget {
   final Song song;
   final bool isSelected;
+  final bool isSelectionMode;
+  final bool isMultiSelected;
   final Future<void> Function() onTap;
   final VoidCallback onLongPress;
 
   const _SongListTile({
     required this.song,
     required this.isSelected,
+    required this.isSelectionMode,
+    required this.isMultiSelected,
     required this.onTap,
     required this.onLongPress,
   });
@@ -1133,7 +1419,7 @@ class _SongListTile extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: isSelected
+              colors: (isSelected || isMultiSelected)
                   ? [
                       AppColors.surfaceLight.withValues(alpha: 0.9),
                       AppColors.surface.withValues(alpha: 0.95),
@@ -1144,13 +1430,25 @@ class _SongListTile extends StatelessWidget {
                     ],
             ),
             border: Border.all(
-              color: isSelected
+              color: (isSelected || isMultiSelected)
                   ? AppColors.accent.withValues(alpha: 0.45)
                   : AppColors.glassBorder,
             ),
           ),
           child: Row(
             children: [
+              if (isSelectionMode) ...[
+                Icon(
+                  isMultiSelected
+                      ? LucideIcons.check
+                      : LucideIcons.circle,
+                  color: isMultiSelected
+                      ? AppColors.accent
+                      : context.adaptiveTextTertiary,
+                  size: context.responsiveIcon(AppConstants.iconSizeMd),
+                ),
+                const SizedBox(width: AppConstants.spacingMd),
+              ],
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppConstants.radiusMd),
                 child: SizedBox(
@@ -1512,7 +1810,11 @@ class _FolderCardState extends State<_FolderCard>
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                _buildArtGrid(padded, artworkTargetWidth, context),
+                                _buildArtGrid(
+                                  padded,
+                                  artworkTargetWidth,
+                                  context,
+                                ),
                                 Positioned.fill(
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
@@ -1537,7 +1839,9 @@ class _FolderCardState extends State<_FolderCard>
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.55),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.55,
+                                      ),
                                       borderRadius: BorderRadius.circular(999),
                                       border: Border.all(
                                         color: Colors.white.withValues(
@@ -1604,7 +1908,11 @@ class _FolderCardState extends State<_FolderCard>
     );
   }
 
-  Widget _buildArtGrid(List<_ArtEntry> artworks, int targetWidth, BuildContext context) {
+  Widget _buildArtGrid(
+    List<_ArtEntry> artworks,
+    int targetWidth,
+    BuildContext context,
+  ) {
     final cellSize = targetWidth ~/ 2;
     final cellRadius = AppConstants.radiusSm;
     return GridView.count(
@@ -1675,6 +1983,25 @@ class _FolderDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final artworks = _getUniqueArtworks();
     final padded = List<_ArtEntry>.from(artworks);
+    final totalDuration = folder.songs.fold<Duration>(
+      Duration.zero,
+      (sum, song) => sum + song.duration,
+    );
+    final uniqueArtists = folder.songs
+        .map((song) => song.artist.trim())
+        .where((artist) => artist.isNotEmpty)
+        .toSet()
+        .length;
+    final uniqueFormats = folder.songs
+        .map((song) => song.fileType.toUpperCase())
+        .where((format) => format.isNotEmpty)
+        .toSet()
+        .length;
+    final totalAlbums = folder.songs
+        .map((song) => (song.album ?? '').trim())
+        .where((album) => album.isNotEmpty)
+        .toSet()
+        .length;
     while (padded.length < 4) {
       padded.add(const _ArtEntry(null, null));
     }
@@ -1684,14 +2011,16 @@ class _FolderDetailScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: 320,
             pinned: true,
-            backgroundColor: AppColors.surface,
+            backgroundColor: AppColors.background,
+            surfaceTintColor: Colors.transparent,
             leading: Container(
               margin: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: AppColors.glassBackground,
                 borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+                border: Border.all(color: AppColors.glassBorder),
               ),
               child: IconButton(
                 icon: Icon(
@@ -1726,6 +2055,29 @@ class _FolderDetailScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppConstants.spacingSm,
+                            vertical: AppConstants.spacingXs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.32),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Folder Collection',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppConstants.spacingSm),
                         Text(
                           folder.name,
                           style: Theme.of(context).textTheme.headlineMedium
@@ -1738,9 +2090,28 @@ class _FolderDetailScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${folder.songs.length} songs',
+                          '$totalAlbums albums • $uniqueArtists artists',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: context.adaptiveTextSecondary),
+                        ),
+                        const SizedBox(height: AppConstants.spacingSm),
+                        Wrap(
+                          spacing: AppConstants.spacingSm,
+                          runSpacing: AppConstants.spacingSm,
+                          children: [
+                            _FolderSummaryPill(
+                              icon: LucideIcons.music4,
+                              label: '${folder.songs.length} tracks',
+                            ),
+                            _FolderSummaryPill(
+                              icon: LucideIcons.clock3,
+                              label: _formatCollectionDuration(totalDuration),
+                            ),
+                            _FolderSummaryPill(
+                              icon: LucideIcons.audioLines,
+                              label: '$uniqueFormats formats',
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1748,22 +2119,116 @@ class _FolderDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.all(8),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppConstants.spacingLg,
+                AppConstants.spacingLg,
+                AppConstants.spacingLg,
+                AppConstants.spacingMd,
+              ),
+              child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.glassBackground,
-                  borderRadius: BorderRadius.circular(AppConstants.radiusMd),
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    LucideIcons.shuffle,
-                    color: Colors.white,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.surfaceLight.withValues(alpha: 0.9),
+                      AppColors.surface.withValues(alpha: 0.95),
+                    ],
                   ),
-                  onPressed: () => _shufflePlayFolder(folder, ref, context),
+                  borderRadius: BorderRadius.circular(AppConstants.radiusXl),
+                  border: Border.all(color: AppColors.glassBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.16),
+                      blurRadius: 24,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppConstants.spacingMd),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Play from this folder',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: context.adaptiveTextPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: AppConstants.spacingXs),
+                      Text(
+                        'Tracks stay grouped in this folder, with artwork, format, and album details surfaced inline.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.adaptiveTextSecondary,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: AppConstants.spacingMd),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _FolderActionButton(
+                              icon: LucideIcons.play,
+                              label: 'Play All',
+                              emphasized: true,
+                              onTap: () => _playFolder(
+                                folder.songs.first,
+                                folder,
+                                ref,
+                                context,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppConstants.spacingSm),
+                          Expanded(
+                            child: _FolderActionButton(
+                              icon: LucideIcons.shuffle,
+                              label: 'Shuffle',
+                              onTap: () =>
+                                  _shufflePlayFolder(folder, ref, context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppConstants.spacingLg,
+                0,
+                AppConstants.spacingLg,
+                AppConstants.spacingSm,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Track List',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: context.adaptiveTextPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${folder.songs.length} songs',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.adaptiveTextSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           SliverPadding(
             padding: const EdgeInsets.only(
@@ -1774,111 +2239,18 @@ class _FolderDetailScreen extends ConsumerWidget {
                 final song = folder.songs[index];
                 return Padding(
                   key: ValueKey(song.id),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppConstants.spacingLg,
-                    vertical: AppConstants.spacingXxs,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppConstants.spacingLg,
+                    0,
+                    AppConstants.spacingLg,
+                    AppConstants.spacingSm,
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-                      onTap: () async {
-                        await ref.read(playerProvider.notifier).play(
-                          song,
-                          playlist: folder.songs,
-                        );
-                        if (context.mounted) {
-                          await NavigationHelper.navigateToFullPlayer(
-                            context,
-                            heroTag: 'folder_song_${song.id}',
-                          );
-                        }
-                      },
-                      onLongPress: () {
-                        SongActionsBottomSheet.show(context, song);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppConstants.spacingMd,
-                          vertical: AppConstants.spacingSm,
-                        ),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(AppConstants.radiusMd),
-                              child: SizedBox(
-                                width: 46,
-                                height: 46,
-                                child: CachedImageWidget(
-                                  imagePath: song.albumArt,
-                                  audioSourcePath: song.filePath,
-                                  fit: BoxFit.cover,
-                                  useThumbnail: true,
-                                  thumbnailWidth: 92,
-                                  thumbnailHeight: 92,
-                                  placeholder: const ColoredBox(
-                                    color: AppColors.surface,
-                                    child: Icon(
-                                      LucideIcons.music,
-                                      color: AppColors.textTertiary,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  errorWidget: const ColoredBox(
-                                    color: AppColors.surface,
-                                    child: Icon(
-                                      LucideIcons.music,
-                                      color: AppColors.textTertiary,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: AppConstants.spacingMd),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    song.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyLarge
-                                        ?.copyWith(
-                                          color: context.adaptiveTextPrimary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${song.artist} • ${song.fileType.toUpperCase()}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: context.adaptiveTextSecondary,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: AppConstants.spacingSm),
-                            Text(
-                              song.formattedDuration,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: context.adaptiveTextTertiary,
-                                fontFeatures: const [FontFeature.tabularFigures()],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  child: _FolderDetailTrackTile(
+                    song: song,
+                    index: index,
+                    onTap: () => _playFolder(song, folder, ref, context),
+                    onLongPress: () =>
+                        SongActionsBottomSheet.show(context, song),
                   ),
                 );
               }, childCount: folder.songs.length),
@@ -1926,16 +2298,392 @@ class _FolderDetailScreen extends ConsumerWidget {
   ) async {
     if (folder.songs.isEmpty) return;
     final shuffled = List<Song>.from(folder.songs)..shuffle(Random());
-    await ref.read(playerProvider.notifier).play(
-      shuffled.first,
-      playlist: shuffled,
-    );
+    await ref
+        .read(playerProvider.notifier)
+        .play(shuffled.first, playlist: shuffled);
     if (context.mounted) {
       await NavigationHelper.navigateToFullPlayer(
         context,
         heroTag: 'folder_shuffle_${folder.key}',
       );
     }
+  }
+
+  Future<void> _playFolder(
+    Song song,
+    FolderGroup folder,
+    WidgetRef ref,
+    BuildContext context,
+  ) async {
+    await ref.read(playerProvider.notifier).play(song, playlist: folder.songs);
+    if (context.mounted) {
+      await NavigationHelper.navigateToFullPlayer(
+        context,
+        heroTag: 'folder_song_${song.id}',
+      );
+    }
+  }
+
+  String _formatCollectionDuration(Duration duration) {
+    if (duration.inHours > 0) {
+      final minutes = duration.inMinutes.remainder(60);
+      return '${duration.inHours}h ${minutes}m';
+    }
+    if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}m';
+    }
+    return '${duration.inSeconds}s';
+  }
+}
+
+class _FolderLoadMoreIndicator extends StatelessWidget {
+  final int visibleCount;
+  final int totalCount;
+  final bool isComplete;
+
+  const _FolderLoadMoreIndicator({
+    required this.visibleCount,
+    required this.totalCount,
+    this.isComplete = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = isComplete
+        ? 'Showing all $totalCount folders'
+        : 'Showing $visibleCount of $totalCount folders';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppConstants.spacingMd,
+        vertical: AppConstants.spacingMd,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.surfaceLight.withValues(alpha: 0.7),
+            AppColors.surface.withValues(alpha: 0.9),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        children: [
+          if (!isComplete) ...[
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  context.adaptiveTextSecondary,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppConstants.spacingSm),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.adaptiveTextSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            isComplete ? 'Done' : 'Scroll for more',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.adaptiveTextTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FolderSummaryPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _FolderSummaryPill({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppConstants.spacingSm,
+        vertical: AppConstants.spacingXs,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white70),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FolderActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool emphasized;
+
+  const _FolderActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.emphasized = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = emphasized
+        ? AppColors.accent.withValues(alpha: 0.18)
+        : AppColors.surfaceLight.withValues(alpha: 0.8);
+    final borderColor = emphasized
+        ? AppColors.accent.withValues(alpha: 0.35)
+        : AppColors.glassBorder;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppConstants.spacingMd,
+            vertical: AppConstants.spacingMd,
+          ),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+            border: Border.all(color: borderColor),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: context.adaptiveTextPrimary),
+              const SizedBox(width: AppConstants.spacingSm),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: context.adaptiveTextPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderDetailTrackTile extends StatelessWidget {
+  final Song song;
+  final int index;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _FolderDetailTrackTile({
+    required this.song,
+    required this.index,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final metaStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: context.adaptiveTextSecondary);
+    final detailStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: context.adaptiveTextTertiary,
+      fontWeight: FontWeight.w500,
+    );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(AppConstants.radiusXl),
+        child: Ink(
+          padding: const EdgeInsets.all(AppConstants.spacingSm),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.surfaceLight.withValues(alpha: 0.82),
+                AppColors.surface.withValues(alpha: 0.94),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(AppConstants.radiusXl),
+            border: Border.all(color: AppColors.glassBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.glassBackgroundStrong,
+                  borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Text(
+                  _trackLabel(song, index),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: context.adaptiveTextPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppConstants.spacingSm),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CachedImageWidget(
+                    imagePath: song.albumArt,
+                    audioSourcePath: song.filePath,
+                    fit: BoxFit.cover,
+                    useThumbnail: true,
+                    thumbnailWidth: 112,
+                    thumbnailHeight: 112,
+                    placeholder: const ColoredBox(
+                      color: AppColors.surface,
+                      child: Icon(
+                        LucideIcons.music,
+                        color: AppColors.textTertiary,
+                        size: 18,
+                      ),
+                    ),
+                    errorWidget: const ColoredBox(
+                      color: AppColors.surface,
+                      child: Icon(
+                        LucideIcons.music,
+                        color: AppColors.textTertiary,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppConstants.spacingMd),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      song.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: context.adaptiveTextPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _primaryMeta(song),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: metaStyle,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _secondaryMeta(song),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: detailStyle,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppConstants.spacingSm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Icon(
+                    LucideIcons.play,
+                    size: 16,
+                    color: context.adaptiveTextTertiary,
+                  ),
+                  const SizedBox(height: AppConstants.spacingSm),
+                  Text(
+                    song.formattedDuration,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.adaptiveTextSecondary,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _trackLabel(Song song, int index) {
+    final trackNumber = song.trackNumber;
+    if (trackNumber != null && trackNumber > 0) {
+      return trackNumber.toString().padLeft(2, '0');
+    }
+    return (index + 1).toString().padLeft(2, '0');
+  }
+
+  String _primaryMeta(Song song) {
+    final album = (song.album ?? '').trim();
+    if (album.isEmpty) {
+      return song.artist;
+    }
+    return '${song.artist} • $album';
+  }
+
+  String _secondaryMeta(Song song) {
+    final parts = <String>[song.fileType.toUpperCase()];
+    if (song.resolution != null && song.resolution!.trim().isNotEmpty) {
+      parts.add(song.resolution!.trim());
+    }
+    if (song.discNumber != null && song.discNumber! > 0) {
+      parts.add('Disc ${song.discNumber}');
+    }
+    return parts.join(' • ');
   }
 }
 

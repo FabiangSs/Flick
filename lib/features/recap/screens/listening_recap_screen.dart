@@ -10,6 +10,7 @@ import 'package:flick/core/theme/adaptive_color_provider.dart';
 import 'package:flick/core/theme/app_colors.dart';
 import 'package:flick/core/utils/responsive.dart';
 import 'package:flick/data/repositories/recently_played_repository.dart';
+import 'package:flick/services/csv_export_service.dart';
 import 'package:flick/services/gallery_save_service.dart';
 import 'package:flick/widgets/common/cached_image_widget.dart';
 import 'package:flick/widgets/common/display_mode_wrapper.dart';
@@ -29,6 +30,7 @@ class _ListeningRecapScreenState extends State<ListeningRecapScreen> {
   final RecentlyPlayedRepository _recentlyPlayedRepository =
       RecentlyPlayedRepository();
   final GallerySaveService _gallerySaveService = GallerySaveService();
+  final CsvExportService _csvExportService = CsvExportService();
   final ImagePicker _imagePicker = ImagePicker();
   final GlobalKey _cardBoundaryKey = GlobalKey();
   final GlobalKey _topSongsPosterBoundaryKey = GlobalKey();
@@ -40,6 +42,8 @@ class _ListeningRecapScreenState extends State<ListeningRecapScreen> {
   Map<ListeningRecapPeriod, ListeningRecap> _recaps = {};
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isExportingCsv = false;
+  bool _isExportingTxt = false;
   String? _cameraBackgroundPath;
   String? _galleryBackgroundPath;
   _RecapRankingPosterType? _savingPosterType;
@@ -214,6 +218,52 @@ class _ListeningRecapScreenState extends State<ListeningRecapScreen> {
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  Future<void> _saveRecapCsv() async {
+    if (_isExportingCsv || _isExportingTxt) return;
+
+    setState(() => _isExportingCsv = true);
+
+    try {
+      final recap = _currentRecap();
+      await _csvExportService.saveCsv(recap);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recap saved as CSV')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _isExportingCsv = false);
+    }
+  }
+
+  Future<void> _saveRecapTxt() async {
+    if (_isExportingCsv || _isExportingTxt) return;
+
+    setState(() => _isExportingTxt = true);
+
+    try {
+      final recap = _currentRecap();
+      await _csvExportService.saveTxt(recap);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recap saved as TXT')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_saveErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _isExportingTxt = false);
     }
   }
 
@@ -632,6 +682,34 @@ class _ListeningRecapScreenState extends State<ListeningRecapScreen> {
           isPrimary: true,
           onTap: _isSaving ? null : _saveCurrentRecap,
         ),
+        if (recap.hasData) ...[
+          const SizedBox(height: AppConstants.spacingSm),
+          Row(
+            children: [
+              Expanded(
+                child: _RecapActionButton(
+                  icon: Icons.table_chart_rounded,
+                  label: _isExportingCsv ? 'Saving...' : 'Save as CSV',
+                  onTap:
+                      (_isExportingCsv || _isExportingTxt)
+                          ? null
+                          : _saveRecapCsv,
+                ),
+              ),
+              const SizedBox(width: AppConstants.spacingSm),
+              Expanded(
+                child: _RecapActionButton(
+                  icon: Icons.description_rounded,
+                  label: _isExportingTxt ? 'Saving...' : 'Save as TXT',
+                  onTap:
+                      (_isExportingCsv || _isExportingTxt)
+                          ? null
+                          : _saveRecapTxt,
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

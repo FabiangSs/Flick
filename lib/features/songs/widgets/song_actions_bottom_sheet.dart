@@ -19,21 +19,31 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 class SongActionsBottomSheet extends ConsumerWidget {
   final Song song;
   final BuildContext rootContext;
+  final VoidCallback? onSelect;
 
   const SongActionsBottomSheet({
     super.key,
     required this.song,
     required this.rootContext,
+    this.onSelect,
   });
 
   /// Show the song actions bottom sheet
-  static Future<void> show(BuildContext context, Song song) {
+  static Future<void> show(
+    BuildContext context,
+    Song song, {
+    VoidCallback? onSelect,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => AppBottomSheetSurface(
-        child: SongActionsBottomSheet(song: song, rootContext: context),
+        child: SongActionsBottomSheet(
+          song: song,
+          rootContext: context,
+          onSelect: onSelect,
+        ),
       ),
     );
   }
@@ -65,6 +75,16 @@ class SongActionsBottomSheet extends ConsumerWidget {
               }
             },
           ),
+          if (onSelect != null)
+            _buildActionTile(
+              context: context,
+              icon: LucideIcons.checkCheck,
+              label: 'Select',
+              onTap: () {
+                Navigator.pop(context);
+                onSelect?.call();
+              },
+            ),
           _buildActionTile(
             context: context,
             icon: LucideIcons.listPlus,

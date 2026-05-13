@@ -48,6 +48,12 @@ class OrbitScroll extends StatefulWidget {
   /// Whether swipe-to-queue and swipe-to-favorite gestures are enabled.
   final bool swipeActionsEnabled;
 
+  /// Whether multiselect mode is active.
+  final bool isSelectionMode;
+
+  /// Set of selected song IDs in multiselect mode.
+  final Set<String> selectedIds;
+
   /// Controller for external jump-to-index actions.
   final OrbitScrollController? controller;
 
@@ -60,6 +66,8 @@ class OrbitScroll extends StatefulWidget {
     this.onSongSwipedLeft,
     this.onSongSwipedRight,
     this.swipeActionsEnabled = false,
+    this.isSelectionMode = false,
+    this.selectedIds = const {},
     this.controller,
   });
 
@@ -437,6 +445,8 @@ class _OrbitScrollState extends State<OrbitScroll>
                 opacity: transform.opacity,
                 isSelected: transform.isSelected,
                 swipeActionsEnabled: widget.swipeActionsEnabled,
+                isSelectionMode: widget.isSelectionMode,
+                isMultiSelected: widget.selectedIds.contains(widget.songs[actualIndex].id),
                 onTap: () {
                   AppHaptics.tap();
                   _animateTo(actualIndex.toDouble());

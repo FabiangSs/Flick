@@ -34,6 +34,12 @@ class SongCard extends StatefulWidget {
   /// Whether swipe-to-queue and swipe-to-favorite gestures are enabled.
   final bool swipeActionsEnabled;
 
+  /// Whether multiselect mode is active.
+  final bool isSelectionMode;
+
+  /// Whether this song is selected in multiselect mode.
+  final bool isMultiSelected;
+
   const SongCard({
     super.key,
     required this.song,
@@ -44,6 +50,8 @@ class SongCard extends StatefulWidget {
     this.onSwipeLeft,
     this.onSwipeRight,
     this.swipeActionsEnabled = false,
+    this.isSelectionMode = false,
+    this.isMultiSelected = false,
   });
 
   @override
@@ -291,6 +299,20 @@ class _SongCardState extends State<SongCard> {
                                   ),
                                 ),
                               ),
+                              if (widget.isSelectionMode)
+                                Positioned(
+                                  top: AppConstants.spacingSm,
+                                  right: AppConstants.spacingSm,
+                                  child: Icon(
+                                    widget.isMultiSelected
+                                        ? Icons.check_circle_rounded
+                                        : Icons.radio_button_unchecked_rounded,
+                                    color: widget.isMultiSelected
+                                        ? AppColors.accent
+                                        : Colors.white54,
+                                    size: 22,
+                                  ),
+                                ),
                             ],
                           ),
                         ),

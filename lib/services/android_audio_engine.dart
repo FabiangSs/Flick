@@ -8,7 +8,7 @@ import 'package:flick/models/song.dart';
 import 'package:flick/services/audio_engine.dart';
 
 typedef AndroidAudioSourcesBuilder =
-    Future<List<just_audio.AudioSource>> Function();
+    Future<just_audio.AudioSource> Function();
 typedef AndroidAudioSourceBuilder =
     Future<just_audio.AudioSource> Function(Song track);
 typedef AndroidPlaylistProvider = List<Song> Function();
@@ -256,12 +256,14 @@ class AndroidAudioEngine implements AudioEngine {
       debugPrint('[Playback] Android load(${track.id}) rebuilding playlist');
       _awaitingInitialSeek = true;
       try {
-        final sources = await _sourcesBuilder();
-        if (sources.isEmpty) {
+        final source = await _sourcesBuilder();
+        // ignore: deprecated_member_use
+        if (source is just_audio.ConcatenatingAudioSource &&
+            source.children.isEmpty) {
           throw StateError('No audio sources available for playback');
         }
-        await player.setAudioSources(
-          sources,
+        await player.setAudioSource(
+          source,
           initialIndex: index,
           preload: true,
         );

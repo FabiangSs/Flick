@@ -323,6 +323,7 @@ class PlayerService {
 
   // Queue State
   final ValueNotifier<List<Song>> queueNotifier = ValueNotifier(const []);
+  final ValueNotifier<List<Song>> upNextNotifier = ValueNotifier(const []);
   final ValueNotifier<int> currentIndexNotifier = ValueNotifier(-1);
   int _nextQueueEntryId = 0;
 
@@ -341,6 +342,8 @@ class PlayerService {
   int _currentIndex = -1;
   bool _isRebuildingPlaylist =
       false; // Flag to prevent unwanted updates during rebuild
+  // ignore: deprecated_member_use
+  just_audio.ConcatenatingAudioSource? _audioSourceSequence;
 
   // Track previous position to detect repeat wrap-around for notification progress
   Duration _lastPosition = Duration.zero;
@@ -540,6 +543,10 @@ class PlayerService {
     );
   }
 
+  void _notifyUpNextChanged() {
+    upNextNotifier.value = upNext;
+  }
+
   void _debounceQueueChanged() {
     _queueDebounceTimer?.cancel();
     _queueDebounceTimer = Timer(_queueDebounce, () {
@@ -554,9 +561,11 @@ class PlayerService {
     if (_currentIndex == newIndex) return;
     _currentIndex = newIndex;
     currentIndexNotifier.value = newIndex;
+    _notifyUpNextChanged();
   }
 
   void _replacePlaybackContext(List<Song> songs) {
+    _audioSourceSequence = null;
     _playlist
       ..clear()
       ..addAll(songs);
@@ -566,6 +575,19 @@ class PlayerService {
     _playlistQueueEntryIds
       ..clear()
       ..addAll(List<int?>.filled(songs.length, null));
+    _queuedEntries.clear();
+    _notifyQueueChanged();
+    _notifyUpNextChanged();
+  }
+
+  List<String> _playlistNonQueueIds() {
+    final ids = <String>[];
+    for (var i = 0; i < _playlist.length; i++) {
+      if (_playlistQueueEntryIds[i] == null) {
+        ids.add(_playlist[i].id);
+      }
+    }
+    return ids;
   }
 
   void syncAlbumArtPaths({
@@ -668,6 +690,7 @@ class PlayerService {
       _playlist.insert(insertIndex + i, entry.song);
       _playlistQueueEntryIds.insert(insertIndex + i, entry.id);
     }
+    _notifyUpNextChanged();
   }
 
   void _consumeQueueEntryAt(int playlistIndex) {
@@ -679,6 +702,7 @@ class PlayerService {
     _playlistQueueEntryIds[playlistIndex] = null;
     _queuedEntries.removeWhere((entry) => entry.id == queueEntryId);
     _notifyQueueChanged();
+    _notifyUpNextChanged();
   }
 
   int _findPlaylistIndexForQueueEntry(int queueEntryId) {
@@ -694,8 +718,13 @@ class PlayerService {
       if (playlistIndex < _currentIndex) {
         _setCurrentIndex(_currentIndex - 1);
       }
+      _removeFromAudioSequence(playlistIndex);
     }
-    _debounceQueueChanged();
+    _notifyQueueChanged();
+    _notifyUpNextChanged();
+    if (_usingRustBackend || _audioSourceSequence == null) {
+      _debounceQueueChanged();
+    }
   }
 
   /// Android: current audio session ID from just_audio (for Equalizer attachment).
@@ -1915,8 +1944,12 @@ class PlayerService {
   }
 
   /// Build audio sources for the playlist (gapless playback).
-  Future<List<just_audio.AudioSource>> _buildAudioSources() async {
-    if (_playlist.isEmpty) return const [];
+  // ignore: deprecated_member_use
+  Future<just_audio.ConcatenatingAudioSource> _buildAudioSources() async {
+    if (_playlist.isEmpty) {
+      // ignore: deprecated_member_use
+      return just_audio.ConcatenatingAudioSource(children: const []);
+    }
 
     const batchSize = 12;
     final sources = <just_audio.AudioSource>[];
@@ -1930,7 +1963,9 @@ class PlayerService {
       sources.addAll(resolvedBatch);
     }
 
-    return sources;
+    // ignore: deprecated_member_use
+    _audioSourceSequence = just_audio.ConcatenatingAudioSource(children: sources);
+    return _audioSourceSequence!;
   }
 
   Future<just_audio.AudioSource> _buildAudioSourceForSong(Song song) async {
@@ -1953,6 +1988,19 @@ class PlayerService {
     }
 
     return just_audio.AudioSource.uri(uri);
+  }
+
+  Future<void> _insertIntoAudioSequence(int playlistIndex, Song song) async {
+    if (_usingRustBackend || _audioSourceSequence == null) return;
+    final source = await _buildAudioSourceForSong(song);
+    _audioSourceSequence!.insert(playlistIndex, source);
+  }
+
+  void _removeFromAudioSequence(int playlistIndex) {
+    if (_usingRustBackend || _audioSourceSequence == null) return;
+    if (playlistIndex < _audioSourceSequence!.children.length) {
+      _audioSourceSequence!.removeAt(playlistIndex);
+    }
   }
 
   Future<Uri> _resolvePlaybackUri(Song song) async {
@@ -2503,6 +2551,7 @@ class PlayerService {
     await player.dispose();
     await _deactivateAndroidAudioSession();
     _justAudioPlayer = null;
+    _audioSourceSequence = null;
   }
 
   Future<void> _disposeUsbEngine() async {
@@ -2885,7 +2934,6 @@ class PlayerService {
         if (existingIndex == -1) {
           _replacePlaybackContext([song]);
           _setCurrentIndex(0);
-          _insertQueuedEntriesAfterCurrent();
         } else {
           _setCurrentIndex(existingIndex);
         }
@@ -2975,7 +3023,7 @@ class PlayerService {
       await _lastPlayedService.saveLastPlayed(
         persistedSong.id,
         position ?? positionNotifier.value,
-        playlistSongIds: _playlist.map((s) => s.id).toList(),
+        playlistSongIds: _playlistNonQueueIds(),
         currentIndex: _currentIndex,
         wasPlaying: isPlayingNotifier.value,
       );
@@ -3330,16 +3378,17 @@ class PlayerService {
       final wasPlaying = isPlayingNotifier.value;
       final currentPosition = positionNotifier.value;
 
-      final sources = await _buildAudioSources();
+      final source = await _buildAudioSources();
+      _audioSourceSequence = source;
 
       await _runWithSuppressedSequenceStateUpdates(() async {
-        await player.setAudioSources(
-          sources,
+        await player.setAudioSource(
+          _audioSourceSequence!,
           initialIndex: _currentIndex,
+          initialPosition: currentPosition,
           preload: true,
         );
 
-        await player.seek(currentPosition, index: _currentIndex);
         await _updateLoopMode();
       });
 
@@ -3378,6 +3427,7 @@ class PlayerService {
     isShuffleNotifier.value = enable;
 
     final current = currentSongNotifier.value;
+    final oldCurrentIndex = _currentIndex;
     final basePlaylist = <Song>[];
     for (var i = 0; i < _playlist.length; i++) {
       if (_playlistQueueEntryIds[i] == null) {
@@ -3407,11 +3457,70 @@ class PlayerService {
     }
     _insertQueuedEntriesAfterCurrent();
 
-    // Rebuild playlist with new order (just_audio only).
     if (!_usingRustBackend) {
-      await _rebuildPlaylist();
+      await _syncPlaylistAfterShuffle(oldCurrentIndex: oldCurrentIndex);
     }
     await _updateNotificationState();
+  }
+
+  Future<void> _syncPlaylistAfterShuffle({required int oldCurrentIndex}) async {
+    final player = _justAudioPlayer;
+    final seq = _audioSourceSequence;
+    if (player == null || seq == null) {
+      await _rebuildPlaylist();
+      return;
+    }
+    if (_playlist.isEmpty || _currentIndex < 0) {
+      await _rebuildPlaylist();
+      return;
+    }
+    final seqLen = seq.children.length;
+    if (oldCurrentIndex < 0 || oldCurrentIndex >= seqLen) {
+      await _rebuildPlaylist();
+      return;
+    }
+    if (seqLen != _playlist.length) {
+      await _rebuildPlaylist();
+      return;
+    }
+
+    _isRebuildingPlaylist = true;
+    try {
+      final newSources = <just_audio.AudioSource>[];
+      for (final song in _playlist) {
+        newSources.add(await _buildAudioSourceForSong(song));
+      }
+
+      await _runWithSuppressedSequenceStateUpdates(() async {
+        final int newIdx = _currentIndex;
+
+        if (oldCurrentIndex > 0) {
+          seq.removeRange(0, oldCurrentIndex);
+        }
+        final afterCurrent = seq.children.length - 1;
+        if (afterCurrent > 0) {
+          seq.removeRange(1, seq.children.length);
+        }
+
+        if (newIdx > 0) {
+          seq.insertAll(0, newSources.sublist(0, newIdx));
+        }
+        if (newIdx + 1 < newSources.length) {
+          seq.insertAll(
+            newIdx + 1,
+            newSources.sublist(newIdx + 1),
+          );
+        }
+
+        await _updateLoopMode();
+
+        // Give ExoPlayer's queued index-change events time to drain while
+        // suppression is still active so they don't flash the wrong song.
+        await Future.delayed(const Duration(milliseconds: 50));
+      });
+    } finally {
+      _isRebuildingPlaylist = false;
+    }
   }
 
   Future<void> toggleLoopMode() async {
@@ -3471,8 +3580,18 @@ class PlayerService {
       );
       _playlist.insert(insertIndex, song);
       _playlistQueueEntryIds.insert(insertIndex, entry.id);
+
+      if (!_usingRustBackend && _audioSourceSequence != null) {
+        await _insertIntoAudioSequence(insertIndex, song);
+      }
     }
-    _debounceQueueChanged();
+    _notifyQueueChanged();
+    _notifyUpNextChanged();
+    if (!_playlist.isNotEmpty ||
+        _usingRustBackend ||
+        _audioSourceSequence == null) {
+      _debounceQueueChanged();
+    }
     return index;
   }
 
@@ -3493,6 +3612,7 @@ class PlayerService {
     }
 
     _notifyQueueChanged();
+    _notifyUpNextChanged();
     await _playInternal(entry.song);
   }
 
@@ -3510,7 +3630,52 @@ class PlayerService {
       }
     }
     _queuedEntries.clear();
+    _notifyUpNextChanged();
     _debounceQueueChanged();
+  }
+
+  /// Clears everything after the current song: both manual queue entries
+  /// and all upcoming playlist items.
+  Future<void> clearAllUpcoming() async {
+    // First clear manual queue entries
+    _queuedEntries.clear();
+
+    // Then remove everything after the current index from the playlist
+    if (_playlist.isNotEmpty && _currentIndex >= 0) {
+      final keepCount = (_currentIndex + 1).clamp(0, _playlist.length);
+      if (keepCount < _playlist.length) {
+        _playlist.removeRange(keepCount, _playlist.length);
+        _playlistQueueEntryIds.removeRange(
+            keepCount, _playlistQueueEntryIds.length);
+      }
+    }
+
+    _notifyQueueChanged();
+    _notifyUpNextChanged();
+    _debounceQueueChanged();
+  }
+
+  /// Removes a single song from the up-next list by its upNext-relative index.
+  /// Index 0 is the first song after the currently playing song.
+  Future<void> removeFromUpNext(int upNextIndex) async {
+    final playlistIndex = _currentIndex + 1 + upNextIndex;
+    if (playlistIndex < 0 || playlistIndex >= _playlist.length) return;
+
+    // If this playlist slot belongs to a manual queue entry, remove that too
+    final queueEntryId = _playlistQueueEntryIds[playlistIndex];
+    if (queueEntryId != null) {
+      _queuedEntries.removeWhere((entry) => entry.id == queueEntryId);
+      _notifyQueueChanged();
+    }
+
+    _playlist.removeAt(playlistIndex);
+    _playlistQueueEntryIds.removeAt(playlistIndex);
+    _removeFromAudioSequence(playlistIndex);
+
+    _notifyUpNextChanged();
+    if (_usingRustBackend || _audioSourceSequence == null) {
+      _debounceQueueChanged();
+    }
   }
 
   Future<void> removeFromQueue(int index) async {
@@ -3538,7 +3703,22 @@ class PlayerService {
       }
     }
     _insertQueuedEntriesAfterCurrent();
+    _notifyUpNextChanged();
     _debounceQueueChanged();
+  }
+
+  Future<void> playFromUpNextIndex(int index) {
+    return _enqueuePlaybackRequest(() => _playFromUpNextIndexInternal(index));
+  }
+
+  Future<void> _playFromUpNextIndexInternal(int index) async {
+    final playlistIndex = _currentIndex + 1 + index;
+    if (playlistIndex < 0 || playlistIndex >= _playlist.length) {
+      return;
+    }
+
+    _setCurrentIndex(playlistIndex);
+    await _playSongAtCurrentIndex();
   }
 
   Future<void> moveQueueItemToNext(int index) async {
