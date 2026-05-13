@@ -115,10 +115,24 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
             child: Column(
               children: [
                 // Header with sort option
-                if (_selectionMode)
-                  _buildSelectionHeader()
-                else
-                  _buildHeader(songsAsync),
+                AnimatedSwitcher(
+                  duration: AppConstants.animationNormal,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  ),
+                  child: _selectionMode
+                      ? KeyedSubtree(
+                          key: const ValueKey('selection_header'),
+                          child: _buildSelectionHeader(),
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('normal_header'),
+                          child: _buildHeader(songsAsync),
+                        ),
+                ),
 
                 // Search Bar (hidden when Search tab is in the nav bar)
                 if (!searchInNavBar) ...[
