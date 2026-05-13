@@ -3736,9 +3736,21 @@ class _LyricsModeWaveformStrip extends StatefulWidget {
       _LyricsModeWaveformStripState();
 }
 
-class _LyricsModeWaveformStripState extends State<_LyricsModeWaveformStrip> {
+class _LyricsModeWaveformStripState extends State<_LyricsModeWaveformStrip>
+    with SingleTickerProviderStateMixin {
   Offset? _pointerDownPosition;
   bool _didTriggerSwipe = false;
+
+  late final AnimationController _arrowAnimController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1000),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _arrowAnimController.dispose();
+    super.dispose();
+  }
 
   void _resetPointerTracking() {
     _pointerDownPosition = null;
@@ -3775,10 +3787,22 @@ class _LyricsModeWaveformStripState extends State<_LyricsModeWaveformStrip> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.keyboard_double_arrow_up_rounded,
-            color: Colors.white.withValues(alpha: 0.72),
-            size: context.responsive(18.0, 20.0, 22.0),
+          AnimatedBuilder(
+            animation: _arrowAnimController,
+            builder: (context, child) {
+              final t = _arrowAnimController.value;
+              final bounce = -4.0 * math.sin(t * math.pi);
+              final opacity = 0.72 + 0.28 * math.sin(t * math.pi);
+              return Transform.translate(
+                offset: Offset(0, bounce),
+                child: Opacity(opacity: opacity, child: child!),
+              );
+            },
+            child: Icon(
+              Icons.keyboard_double_arrow_up_rounded,
+              color: Colors.white,
+              size: context.responsive(18.0, 20.0, 22.0),
+            ),
           ),
           SizedBox(height: context.responsive(2.0, 4.0, 6.0)),
           Padding(
