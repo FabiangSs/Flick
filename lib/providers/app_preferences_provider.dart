@@ -130,6 +130,22 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
         .read(appPreferencesServiceProvider)
         .setImmersiveAutoFullViewSeconds(value);
   }
+
+  Future<void> setVisualizerAnimationStyle(String value) async {
+    if (state.visualizerAnimationStyle == value) return;
+    state = state.copyWith(visualizerAnimationStyle: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setVisualizerAnimationStyle(value);
+  }
+
+  Future<void> setVisualizerFrequencyMode(String value) async {
+    if (state.visualizerFrequencyMode == value) return;
+    state = state.copyWith(visualizerFrequencyMode: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setVisualizerFrequencyMode(value);
+  }
 }
 
 final appPreferencesProvider =

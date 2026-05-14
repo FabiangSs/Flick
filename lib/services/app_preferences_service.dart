@@ -17,6 +17,8 @@ class AppPreferences {
   final bool fastIndexEnabled;
   final int fastIndexTimeoutSeconds;
   final int immersiveAutoFullViewSeconds;
+  final String visualizerAnimationStyle;
+  final String visualizerFrequencyMode;
 
   const AppPreferences({
     this.animationsEnabled = true,
@@ -35,6 +37,8 @@ class AppPreferences {
     this.fastIndexEnabled = true,
     this.fastIndexTimeoutSeconds = 3,
     this.immersiveAutoFullViewSeconds = 0,
+    this.visualizerAnimationStyle = 'bars',
+    this.visualizerFrequencyMode = 'full',
   });
 
   AppPreferences copyWith({
@@ -54,6 +58,8 @@ class AppPreferences {
     bool? fastIndexEnabled,
     int? fastIndexTimeoutSeconds,
     int? immersiveAutoFullViewSeconds,
+    String? visualizerAnimationStyle,
+    String? visualizerFrequencyMode,
   }) {
     return AppPreferences(
       animationsEnabled: animationsEnabled ?? this.animationsEnabled,
@@ -75,6 +81,10 @@ class AppPreferences {
           fastIndexTimeoutSeconds ?? this.fastIndexTimeoutSeconds,
       immersiveAutoFullViewSeconds:
           immersiveAutoFullViewSeconds ?? this.immersiveAutoFullViewSeconds,
+      visualizerAnimationStyle:
+          visualizerAnimationStyle ?? this.visualizerAnimationStyle,
+      visualizerFrequencyMode:
+          visualizerFrequencyMode ?? this.visualizerFrequencyMode,
     );
   }
 }
@@ -96,6 +106,8 @@ class AppPreferencesService {
   static const _fastIndexEnabledKey = 'fast_index_enabled';
   static const _fastIndexTimeoutKey = 'fast_index_timeout_seconds';
   static const _immersiveAutoFullViewKey = 'immersive_auto_full_view_seconds';
+  static const _visualizerAnimationStyleKey = 'visualizer_animation_style';
+  static const _visualizerFrequencyModeKey = 'visualizer_frequency_mode';
 
   Future<AppPreferences> getPreferences() async {
     final prefs = await SharedPreferences.getInstance();
@@ -117,6 +129,10 @@ class AppPreferencesService {
       fastIndexTimeoutSeconds: prefs.getInt(_fastIndexTimeoutKey) ?? 3,
       immersiveAutoFullViewSeconds:
           prefs.getInt(_immersiveAutoFullViewKey) ?? 0,
+      visualizerAnimationStyle:
+          prefs.getString(_visualizerAnimationStyleKey) ?? 'bars',
+      visualizerFrequencyMode:
+          prefs.getString(_visualizerFrequencyModeKey) ?? 'full',
     );
   }
 
@@ -278,5 +294,25 @@ class AppPreferencesService {
   Future<void> setImmersiveAutoFullViewSeconds(int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_immersiveAutoFullViewKey, value);
+  }
+
+  Future<String> getVisualizerAnimationStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_visualizerAnimationStyleKey) ?? 'bars';
+  }
+
+  Future<void> setVisualizerAnimationStyle(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_visualizerAnimationStyleKey, value);
+  }
+
+  Future<String> getVisualizerFrequencyMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_visualizerFrequencyModeKey) ?? 'full';
+  }
+
+  Future<void> setVisualizerFrequencyMode(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_visualizerFrequencyModeKey, value);
   }
 }
