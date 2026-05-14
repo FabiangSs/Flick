@@ -112,11 +112,11 @@ class VisualizerSettingsScreen extends ConsumerWidget {
               ),
               const SettingsDivider(),
               SelectionSetting(
-                icon: LucideIcons.droplets,
-                title: 'Fluid',
-                subtitle: 'Slow, viscous smoothing — water-like',
-                selected: prefs.visualizerMovementMode == 'fluid',
-                onTap: () => notifier.setVisualizerMovementMode('fluid'),
+                icon: LucideIcons.audioLines,
+                title: 'Smooth',
+                subtitle: 'Natural equalizer feel — responsive yet smooth',
+                selected: prefs.visualizerMovementMode == 'smooth',
+                onTap: () => notifier.setVisualizerMovementMode('smooth'),
               ),
               const SettingsDivider(),
               SelectionSetting(
