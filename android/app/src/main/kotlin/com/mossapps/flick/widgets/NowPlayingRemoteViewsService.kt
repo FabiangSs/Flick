@@ -67,7 +67,7 @@ private class QueueViewsFactory(
         // Fill-in intent: PendingIntent template was set with
         // `home_widget://player/jump`; we just need to attach the index.
         val fillIn = Intent().apply {
-            data = android.net.Uri.parse("home_widget://player/jump?index=$position")
+            data = android.net.Uri.parse("flickwidget://player/jump?index=$position")
         }
         row.setOnClickFillInIntent(R.id.queue_row_root, fillIn)
         return row

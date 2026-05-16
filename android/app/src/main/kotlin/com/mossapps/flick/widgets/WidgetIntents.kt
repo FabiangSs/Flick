@@ -1,27 +1,23 @@
 package com.mossapps.flick.widgets
 
 import android.app.PendingIntent
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import com.mossapps.flick.MainActivity
-import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 
 /**
  * Helpers for building [PendingIntent]s used by the widgets.
  *
- * Two flavours are produced:
- *   * Launch intents – open `MainActivity` and forward the Uri to Flutter.
- *     Used for actions that should bring the app to the foreground (open
- *     library section, tap to jump in the now-playing queue).
- *   * Background intents – fire the URI without opening the app. Used for the
- *     play / pause / next / previous transport buttons.
+ * All intents open `MainActivity` and forward the URI to Flutter via the
+ * `home_widget` plugin's click stream. The plugin does not register a
+ * background broadcast receiver, so launch intents are used for every action.
  */
 internal object WidgetIntents {
 
-    /** Opens the app and routes the click URI into Flutter. */
+    private var _requestCode = 0
+    private fun nextRequestCode(): Int = _requestCode++
+
     fun launch(context: Context, uri: Uri, requestCode: Int): PendingIntent {
         return HomeWidgetLaunchIntent.getActivity(
             context,
@@ -30,22 +26,17 @@ internal object WidgetIntents {
         )
     }
 
-    /** Fires the URI without opening the app (background dispatch). */
-    fun background(context: Context, uri: Uri): PendingIntent {
-        return HomeWidgetBackgroundIntent.getBroadcast(context, uri)
-    }
-
     fun playerPlayPause(context: Context): PendingIntent =
-        background(context, Uri.parse("home_widget://player/play_pause"))
+        launch(context, Uri.parse("flickwidget://player/play_pause"), nextRequestCode())
 
     fun playerNext(context: Context): PendingIntent =
-        background(context, Uri.parse("home_widget://player/next"))
+        launch(context, Uri.parse("flickwidget://player/next"), nextRequestCode())
 
     fun playerPrevious(context: Context): PendingIntent =
-        background(context, Uri.parse("home_widget://player/previous"))
+        launch(context, Uri.parse("flickwidget://player/previous"), nextRequestCode())
 
     fun openApp(context: Context, requestCode: Int): PendingIntent =
-        launch(context, Uri.parse("home_widget://player/open"), requestCode)
+        launch(context, Uri.parse("flickwidget://player/open"), requestCode)
 
     fun openLibrarySection(
         context: Context,
@@ -53,14 +44,13 @@ internal object WidgetIntents {
         requestCode: Int,
     ): PendingIntent = launch(
         context,
-        Uri.parse("home_widget://library/open?section=$section"),
+        Uri.parse("flickwidget://library/open?section=$section"),
         requestCode,
     )
 
-    /** Template intent used by [RemoteViewsService] item clicks in the queue. */
     fun queueJumpTemplate(context: Context): PendingIntent = launch(
         context,
-        Uri.parse("home_widget://player/jump"),
+        Uri.parse("flickwidget://player/jump"),
         REQ_QUEUE_TEMPLATE,
     )
 
