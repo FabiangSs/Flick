@@ -2,13 +2,8 @@ package com.mossapps.flick.widgets
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.mossapps.flick.R
 
-/**
- * Centralised access to the SharedPreferences file used by the `home_widget`
- * Flutter plugin. The plugin stores data under the `HomeWidgetPreferences`
- * preferences file on Android by default. All widget keys here must match the
- * ones written by `WidgetSyncService` on the Dart side.
- */
 internal object WidgetPrefs {
     private const val PREFS_NAME = "HomeWidgetPreferences"
 
@@ -18,32 +13,49 @@ internal object WidgetPrefs {
     const val KEY_ALBUM_ART = "flick_widget_album_art"
     const val KEY_IS_PLAYING = "flick_widget_is_playing"
     const val KEY_HAS_SONG = "flick_widget_has_song"
-    const val KEY_QUEUE_JSON = "flick_widget_queue_json"
-    const val KEY_CURRENT_INDEX = "flick_widget_current_index"
+
+    const val KEY_BG_OPACITY = "flick_widget_bg_opacity"
+    const val KEY_SHOW_ALBUM_ART = "flick_widget_show_album_art"
+    const val KEY_SHOW_ARTIST = "flick_widget_show_artist"
+    const val KEY_ACCENT_COLOR = "flick_widget_accent_color"
+
+    private val BG_OPACITY_MAP = mapOf(
+        0 to 0x00, 1 to 0x40, 2 to 0x80, 3 to 0xC0, 4 to 0xFF
+    )
 
     fun get(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-}
 
-/** A single decoded queue entry. */
-internal data class QueueEntry(
-    val id: String,
-    val title: String,
-    val artist: String,
-    val albumArtPath: String,
-)
+    fun getBgOpacityAlpha(context: Context): Int {
+        val level = get(context).getInt(KEY_BG_OPACITY, 3)
+        return BG_OPACITY_MAP[level] ?: 0xC0
+    }
 
-/** Decodes the compact CSV-like queue blob produced by `WidgetSyncService`. */
-internal fun decodeQueue(raw: String?): List<QueueEntry> {
-    if (raw.isNullOrEmpty()) return emptyList()
-    return raw.split('\n').mapNotNull { line ->
-        if (line.isEmpty()) return@mapNotNull null
-        val parts = line.split('\u0001')
-        QueueEntry(
-            id = parts.getOrElse(0) { "" },
-            title = parts.getOrElse(1) { "" },
-            artist = parts.getOrElse(2) { "" },
-            albumArtPath = parts.getOrElse(3) { "" },
-        )
+    fun getShowAlbumArt(context: Context): Boolean =
+        get(context).getBoolean(KEY_SHOW_ALBUM_ART, true)
+
+    fun getShowArtist(context: Context): Boolean =
+        get(context).getBoolean(KEY_SHOW_ARTIST, true)
+
+    fun getAccentColor(context: Context): Int {
+        val name = get(context).getString(KEY_ACCENT_COLOR, "white") ?: "white"
+        return when (name) {
+            "amber" -> 0xFFFFB300.toInt()
+            "blue" -> 0xFF64B5F6.toInt()
+            "green" -> 0xFF81C784.toInt()
+            "purple" -> 0xFFCE93D8.toInt()
+            else -> 0xFFFFFFFF.toInt()
+        }
+    }
+
+    fun getBackgroundRes(context: Context): Int {
+        val level = get(context).getInt(KEY_BG_OPACITY, 3)
+        return when (level) {
+            0 -> R.drawable.widget_bg_0
+            1 -> R.drawable.widget_bg_1
+            2 -> R.drawable.widget_bg_2
+            4 -> R.drawable.widget_bg_4
+            else -> R.drawable.widget_bg_3
+        }
     }
 }

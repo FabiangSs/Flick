@@ -2,57 +2,52 @@ package com.mossapps.flick.widgets
 
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import com.mossapps.flick.MainActivity
-import es.antonborri.home_widget.HomeWidgetLaunchIntent
 
-/**
- * Helpers for building [PendingIntent]s used by the widgets.
- *
- * All intents open `MainActivity` and forward the URI to Flutter via the
- * `home_widget` plugin's click stream. The plugin does not register a
- * background broadcast receiver, so launch intents are used for every action.
- */
 internal object WidgetIntents {
 
-    private var _requestCode = 0
-    private fun nextRequestCode(): Int = _requestCode++
+    private val immutableFlags: Int
+        get() = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
 
-    fun launch(context: Context, uri: Uri, requestCode: Int): PendingIntent {
-        return HomeWidgetLaunchIntent.getActivity(
+    private fun broadcast(context: Context, uri: Uri, requestCode: Int): PendingIntent {
+        val intent = Intent(context, WidgetActionReceiver::class.java).apply {
+            action = "com.mossapps.flick.WIDGET_ACTION"
+            data = uri
+        }
+        return PendingIntent.getBroadcast(
             context,
-            MainActivity::class.java,
-            uri,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlags,
+        )
+    }
+
+    private fun activity(context: Context, uri: Uri, requestCode: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = "com.mossapps.flick.WIDGET_LAUNCH"
+            data = uri
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        return PendingIntent.getActivity(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlags,
         )
     }
 
     fun playerPlayPause(context: Context): PendingIntent =
-        launch(context, Uri.parse("flickwidget://player/play_pause"), nextRequestCode())
+        broadcast(context, Uri.parse("flickwidget://player/play_pause"), 1)
 
     fun playerNext(context: Context): PendingIntent =
-        launch(context, Uri.parse("flickwidget://player/next"), nextRequestCode())
+        broadcast(context, Uri.parse("flickwidget://player/next"), 2)
 
     fun playerPrevious(context: Context): PendingIntent =
-        launch(context, Uri.parse("flickwidget://player/previous"), nextRequestCode())
+        broadcast(context, Uri.parse("flickwidget://player/previous"), 3)
 
     fun openApp(context: Context, requestCode: Int): PendingIntent =
-        launch(context, Uri.parse("flickwidget://player/open"), requestCode)
-
-    fun openLibrarySection(
-        context: Context,
-        section: String,
-        requestCode: Int,
-    ): PendingIntent = launch(
-        context,
-        Uri.parse("flickwidget://library/open?section=$section"),
-        requestCode,
-    )
-
-    fun queueJumpTemplate(context: Context): PendingIntent = launch(
-        context,
-        Uri.parse("flickwidget://player/jump"),
-        REQ_QUEUE_TEMPLATE,
-    )
-
-    const val REQ_QUEUE_TEMPLATE = 1000
+        activity(context, Uri.parse("flickwidget://player/open"), requestCode)
 }
