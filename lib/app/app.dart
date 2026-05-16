@@ -28,6 +28,8 @@ import 'package:flick/widgets/common/cached_image_widget.dart';
 import 'package:flick/models/song.dart';
 import 'package:flick/services/library_scanner_service.dart';
 import 'package:flick/services/player_service.dart';
+import 'package:flick/services/widget_sync_service.dart';
+import 'package:flick/services/widget_intent_handler.dart';
 import 'package:flick/models/nav_bar_config.dart';
 
 /// Main application widget for Flick Player.
@@ -73,6 +75,8 @@ class _MainShellState extends ConsumerState<MainShell>
   late final ProviderSubscription<bool> _navBarAlwaysVisibleSubscription;
   late final ProviderSubscription<Song?> _currentSongSubscription;
   late final ProviderSubscription<int> _navigationIndexSubscription;
+  late final ProviderSubscription<PlayerState> _widgetSyncSubscription;
+  late final WidgetIntentHandler _widgetIntentHandler;
 
   // Track previous song to detect changes
   Song? _previousSong;
@@ -115,6 +119,12 @@ class _MainShellState extends ConsumerState<MainShell>
             reverseCurve: Curves.easeOutCubic,
           ),
         );
+
+    // Home-screen widget integration: keep widgets in sync with player and
+    // route widget click intents back into the app.
+    _widgetSyncSubscription = installWidgetSync(ref);
+    _widgetIntentHandler = WidgetIntentHandler(ref);
+    unawaited(_widgetIntentHandler.attach());
 
     _navBarVisibilitySubscription = ref.listenManual<bool>(
       navBarVisibleProvider,
@@ -292,6 +302,8 @@ class _MainShellState extends ConsumerState<MainShell>
     _navBarAlwaysVisibleSubscription.close();
     _currentSongSubscription.close();
     _navigationIndexSubscription.close();
+    _widgetSyncSubscription.close();
+    unawaited(_widgetIntentHandler.detach());
     _pageController.dispose();
     _navBarAnimationController.dispose();
     super.dispose();
