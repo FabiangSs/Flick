@@ -154,6 +154,52 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
         .read(appPreferencesServiceProvider)
         .setVisualizerMovementMode(value);
   }
+
+  Future<void> setArtworkCardArtworkScale(double value) async {
+    if (state.artworkCardArtworkScale == value) return;
+    state = state.copyWith(artworkCardArtworkScale: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setArtworkCardArtworkScale(value);
+  }
+
+  Future<void> setArtworkCardTextScale(double value) async {
+    if (state.artworkCardTextScale == value) return;
+    state = state.copyWith(artworkCardTextScale: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setArtworkCardTextScale(value);
+  }
+
+  Future<void> setArtworkCardVerticalOffset(double value) async {
+    if (state.artworkCardVerticalOffset == value) return;
+    state = state.copyWith(artworkCardVerticalOffset: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setArtworkCardVerticalOffset(value);
+  }
+
+  Future<void> setImmersiveTextScale(double value) async {
+    if (state.immersiveTextScale == value) return;
+    state = state.copyWith(immersiveTextScale: value);
+    await ref.read(appPreferencesServiceProvider).setImmersiveTextScale(value);
+  }
+
+  Future<void> setImmersiveVerticalOffset(double value) async {
+    if (state.immersiveVerticalOffset == value) return;
+    state = state.copyWith(immersiveVerticalOffset: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setImmersiveVerticalOffset(value);
+  }
+
+  Future<void> setImmersiveFullViewScale(double value) async {
+    if (state.immersiveFullViewScale == value) return;
+    state = state.copyWith(immersiveFullViewScale: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setImmersiveFullViewScale(value);
+  }
 }
 
 final appPreferencesProvider =
