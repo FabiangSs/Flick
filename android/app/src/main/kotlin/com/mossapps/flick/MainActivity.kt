@@ -124,7 +124,7 @@ class MainActivity: FlutterActivity() {
     private var visualizer: Visualizer? = null
     private var visualizerEventSink: EventChannel.EventSink? = null
     private var widgetChannel: MethodChannel? = null
-    private val HOME_WIDGET_LAUNCH_ACTION = "es.antonborri.home_widget.action.LAUNCH"
+    private val HOME_WIDGET_LAUNCH_ACTION = "com.mossapps.flick.WIDGET_LAUNCH"
 
     // Load the Rust shared library before calling into native startup hooks.
     init {
