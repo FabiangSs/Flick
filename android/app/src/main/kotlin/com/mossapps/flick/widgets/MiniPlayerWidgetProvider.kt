@@ -34,68 +34,95 @@ class MiniPlayerWidgetProvider : AppWidgetProvider() {
 
             views.applyBackground(context)
 
-            views.setTextViewText(R.id.widget_title, title)
+            if (hasSong) {
+                // Active state: show song info and transport controls
+                views.setTextViewText(R.id.widget_title, title)
 
-            if (hasSong && showArtist && artist.isNotEmpty()) {
-                views.setTextViewText(R.id.widget_artist, artist)
-                views.setTextColor(R.id.widget_artist, accentColor)
-                views.setViewVisibility(R.id.widget_artist, View.VISIBLE)
-            } else {
-                views.setViewVisibility(R.id.widget_artist, View.GONE)
-            }
-
-            if (showArt) {
-                val art = WidgetArtLoader.load(artPath)
-                if (art != null) {
-                    views.setImageViewBitmap(R.id.widget_art, art)
+                if (showArtist && artist.isNotEmpty()) {
+                    views.setTextViewText(R.id.widget_artist, artist)
+                    views.setTextColor(R.id.widget_artist, accentColor)
+                    views.setViewVisibility(R.id.widget_artist, View.VISIBLE)
                 } else {
-                    views.setImageViewResource(R.id.widget_art, R.drawable.widget_default_art)
+                    views.setViewVisibility(R.id.widget_artist, View.GONE)
                 }
-            } else {
-                views.setViewVisibility(R.id.widget_art, View.GONE)
-            }
 
-            views.setImageViewResource(
-                R.id.widget_play_pause,
-                if (isPlaying && hasSong) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
-            )
+                if (showArt) {
+                    val art = WidgetArtLoader.load(artPath)
+                    if (art != null) {
+                        views.setImageViewBitmap(R.id.widget_art, art)
+                    } else {
+                        views.setImageViewResource(R.id.widget_art, R.drawable.widget_default_art)
+                    }
+                    views.setViewVisibility(R.id.widget_art, View.VISIBLE)
+                } else {
+                    views.setViewVisibility(R.id.widget_art, View.GONE)
+                }
 
-            if (durationMs > 0) {
-                views.setViewVisibility(R.id.widget_progress, View.VISIBLE)
-                views.setProgressBar(
-                    R.id.widget_progress,
-                    1000,
-                    (positionMs * 1000L / durationMs).toInt().coerceIn(0, 1000),
-                    false,
+                views.setImageViewResource(
+                    R.id.widget_play_pause,
+                    if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
                 )
-            } else {
-                views.setViewVisibility(R.id.widget_progress, View.GONE)
-            }
 
-            views.setOnClickPendingIntent(
-                R.id.widget_art,
-                WidgetIntents.openApp(context, 10),
-            )
-            views.setOnClickPendingIntent(
-                R.id.widget_title,
-                WidgetIntents.openApp(context, 11),
-            )
-            views.setOnClickPendingIntent(
-                R.id.widget_artist,
-                WidgetIntents.openApp(context, 12),
-            )
-            views.setOnClickPendingIntent(
-                R.id.widget_play_pause,
-                WidgetIntents.playerPlayPause(context),
-            )
-            views.setOnClickPendingIntent(
-                R.id.widget_next,
-                WidgetIntents.playerNext(context),
-            )
-            views.setOnClickPendingIntent(
-                R.id.widget_prev,
-                WidgetIntents.playerPrevious(context),
-            )
+                if (durationMs > 0) {
+                    views.setViewVisibility(R.id.widget_progress, View.VISIBLE)
+                    views.setProgressBar(
+                        R.id.widget_progress,
+                        1000,
+                        (positionMs * 1000L / durationMs).toInt().coerceIn(0, 1000),
+                        false,
+                    )
+                } else {
+                    views.setViewVisibility(R.id.widget_progress, View.GONE)
+                }
+
+                views.setOnClickPendingIntent(
+                    R.id.widget_art,
+                    WidgetIntents.openApp(context, 10),
+                )
+                views.setOnClickPendingIntent(
+                    R.id.widget_title,
+                    WidgetIntents.openApp(context, 11),
+                )
+                views.setOnClickPendingIntent(
+                    R.id.widget_artist,
+                    WidgetIntents.openApp(context, 12),
+                )
+                views.setOnClickPendingIntent(
+                    R.id.widget_play_pause,
+                    WidgetIntents.playerPlayPause(context),
+                )
+                views.setOnClickPendingIntent(
+                    R.id.widget_next,
+                    WidgetIntents.playerNext(context),
+                )
+                views.setOnClickPendingIntent(
+                    R.id.widget_prev,
+                    WidgetIntents.playerPrevious(context),
+                )
+
+                views.setViewVisibility(R.id.widget_prev, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_play_pause, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_next, View.VISIBLE)
+            } else {
+                // Killed/idle state: show "Tap to open" with no transport controls
+                views.setTextViewText(
+                    R.id.widget_title,
+                    context.getString(R.string.widget_tap_to_open),
+                )
+                views.setViewVisibility(R.id.widget_artist, View.GONE)
+                views.setViewVisibility(R.id.widget_progress, View.GONE)
+                views.setViewVisibility(R.id.widget_prev, View.GONE)
+                views.setViewVisibility(R.id.widget_play_pause, View.GONE)
+                views.setViewVisibility(R.id.widget_next, View.GONE)
+
+                views.setImageViewResource(R.id.widget_art, R.drawable.widget_default_art)
+                views.setViewVisibility(R.id.widget_art, View.VISIBLE)
+
+                // Make the whole content area open the app
+                val openIntent = WidgetIntents.openApp(context, 20)
+                views.setOnClickPendingIntent(R.id.widget_art, openIntent)
+                views.setOnClickPendingIntent(R.id.widget_title, openIntent)
+            }
 
             appWidgetManager.updateAppWidget(id, views)
         }
