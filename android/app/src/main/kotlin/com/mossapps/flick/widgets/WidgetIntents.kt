@@ -48,6 +48,12 @@ internal object WidgetIntents {
     fun playerPrevious(context: Context): PendingIntent =
         broadcast(context, Uri.parse("flickwidget://player/previous"), 3)
 
+    fun playerShuffle(context: Context): PendingIntent =
+        broadcast(context, Uri.parse("flickwidget://player/shuffle"), 4)
+
+    fun playerRepeat(context: Context): PendingIntent =
+        broadcast(context, Uri.parse("flickwidget://player/repeat"), 5)
+
     fun openApp(context: Context, requestCode: Int): PendingIntent =
         activity(context, Uri.parse("flickwidget://player/open"), requestCode)
 }
