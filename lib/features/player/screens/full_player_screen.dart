@@ -27,6 +27,7 @@ import 'package:flick/providers/app_preferences_provider.dart';
 import 'package:flick/providers/playlist_provider.dart';
 import 'package:flick/features/player/widgets/audio_visualizer.dart';
 import 'package:flick/features/player/widgets/lyrics_editor_bottom_sheet.dart';
+import 'package:flick/features/player/widgets/online_lyrics_search_sheet.dart';
 import 'package:flick/features/player/widgets/line_seek_bar.dart';
 import 'package:flick/features/player/widgets/waveform_seek_bar.dart';
 import 'package:flick/models/progress_bar_style.dart';
@@ -3748,7 +3749,7 @@ class _InlineLyricsPanelState extends State<_InlineLyricsPanel> {
   bool _isLoading = true;
   bool _hasManualLyricsSelection = false;
   int _activeLineIndex = -1;
-  int _lastScrolledIndex = -1;
+  bool _isMetaCollapsed = false;
 
   @override
   void initState() {
@@ -3791,7 +3792,6 @@ class _InlineLyricsPanelState extends State<_InlineLyricsPanel> {
       _isLoading = true;
       _lyricsData = null;
       _activeLineIndex = -1;
-      _lastScrolledIndex = -1;
     });
 
     final loaded = await widget.lyricsService.loadLyricsForSong(
@@ -3815,39 +3815,20 @@ class _InlineLyricsPanelState extends State<_InlineLyricsPanel> {
   }
 
   void _scrollToActiveLine(int index) {
-    if (!_scrollController.hasClients ||
-        index < 0 ||
-        index == _lastScrolledIndex) {
-      return;
-    }
+    if (!_scrollController.hasClients || index < 0) return;
 
-    final viewportHeight = _scrollController.position.viewportDimension;
     final maxScroll = _scrollController.position.maxScrollExtent;
-    final target =
-        (index * _lineHeight) +
-        (_lineHeight / 2) -
-        (viewportHeight * (0.5 - _centerFactor));
+    final target = (index * _lineHeight) + (_lineHeight / 2);
     final clampedTarget = target.clamp(0.0, maxScroll);
 
-    _lastScrolledIndex = index;
-
     final delta = (_scrollController.offset - clampedTarget).abs();
-    if (delta < 8) return;
+    if (delta < _lineHeight * 0.08) return;
 
-    if (delta < _lineHeight * 0.75) {
-      _scrollController.jumpTo(clampedTarget);
-      return;
-    }
-
-    if (AppConstants.animationNormal == Duration.zero) {
-      _scrollController.jumpTo(clampedTarget);
-    } else {
-      _scrollController.animateTo(
-        clampedTarget,
-        duration: AppConstants.animationNormal,
-        curve: Curves.easeOutCubic,
-      );
-    }
+    _scrollController.animateTo(
+      clampedTarget,
+      duration: AppConstants.animationNormal,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _seekToLyricLine(int index) async {
@@ -3931,6 +3912,18 @@ class _InlineLyricsPanelState extends State<_InlineLyricsPanel> {
     _showMessage('Switched back to the automatic lyrics source.');
   }
 
+  Future<void> _searchOnlineLyrics() async {
+    final result = await OnlineLyricsSearchSheet.show(
+      context: context,
+      song: widget.song,
+      lyricsService: widget.lyricsService,
+    );
+    if (result == true && mounted) {
+      await _loadLyricsForSong(widget.song);
+      _showMessage('Lyrics saved from LRCLib.');
+    }
+  }
+
   Widget _buildActionButtons() {
     Widget action({
       required IconData icon,
@@ -3982,6 +3975,11 @@ class _InlineLyricsPanelState extends State<_InlineLyricsPanel> {
             label: 'Use Existing File',
             onPressed: () => unawaited(_importLyricsFile()),
           ),
+          action(
+            icon: LucideIcons.globe,
+            label: 'Search Online',
+            onPressed: () => unawaited(_searchOnlineLyrics()),
+          ),
           if (_hasManualLyricsSelection)
             action(
               icon: LucideIcons.refreshCcw,
@@ -4025,30 +4023,68 @@ class _InlineLyricsPanelState extends State<_InlineLyricsPanel> {
     }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
+        GestureDetector(
+          onTap: () => setState(() => _isMetaCollapsed = !_isMetaCollapsed),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                chip(LucideIcons.fileText, 'Lyrics'),
+                const SizedBox(width: 8),
+                AnimatedRotation(
+                  turns: _isMetaCollapsed ? 0.0 : 0.5,
+                  duration: AppConstants.animationFast,
+                  child: Icon(
+                    LucideIcons.chevronDown,
+                    size: 14,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: AppConstants.animationFast,
+          crossFadeState: _isMetaCollapsed
+              ? CrossFadeState.showFirst
+              : CrossFadeState.showSecond,
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              chip(LucideIcons.fileText, 'Lyrics'),
-              chip(
-                lyrics.isSynchronized
-                    ? LucideIcons.clock3
-                    : Icons.notes_rounded,
-                lyrics.isSynchronized ? 'Tap a line to seek' : 'Static lyrics',
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    chip(
+                      lyrics.isSynchronized
+                          ? LucideIcons.clock3
+                          : Icons.notes_rounded,
+                      lyrics.isSynchronized
+                          ? 'Tap a line to seek'
+                          : 'Static lyrics',
+                    ),
+                    chip(
+                      LucideIcons.slidersHorizontal,
+                      'Simple + advanced sync tools',
+                    ),
+                    if (sourceLabel != null)
+                      chip(LucideIcons.badgeInfo, sourceLabel),
+                  ],
+                ),
               ),
-              chip(
-                LucideIcons.slidersHorizontal,
-                'Simple + advanced sync tools',
-              ),
-              if (sourceLabel != null) chip(LucideIcons.badgeInfo, sourceLabel),
+              _buildActionButtons(),
             ],
           ),
         ),
-        _buildActionButtons(),
       ],
     );
   }
