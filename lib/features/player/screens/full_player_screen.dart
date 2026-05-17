@@ -603,10 +603,15 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
                         artworkCardTextScale: appPrefs.artworkCardTextScale,
                         artworkCardVerticalOffset:
                             appPrefs.artworkCardVerticalOffset,
+                        artworkCardShowTitle: appPrefs.artworkCardShowTitle,
+                        artworkCardShowArtist: appPrefs.artworkCardShowArtist,
+                        artworkCardShowAlbum: appPrefs.artworkCardShowAlbum,
                         immersiveTextScale: appPrefs.immersiveTextScale,
                         immersiveVerticalOffset:
                             appPrefs.immersiveVerticalOffset,
                         immersiveFullViewScale: appPrefs.immersiveFullViewScale,
+                        immersiveShowTitle: appPrefs.immersiveShowTitle,
+                        immersiveShowArtist: appPrefs.immersiveShowArtist,
                       ),
                       const SizedBox(height: 16),
                       _PlayerLayoutOptionTile(
@@ -673,6 +678,27 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
                             onChanged:
                                 prefsNotifier.setArtworkCardVerticalOffset,
                           ),
+                          const SizedBox(height: 6),
+                          _PlayerCustomizationToggle(
+                            title: 'Show title',
+                            value: appPrefs.artworkCardShowTitle,
+                            onChanged: prefsNotifier.setArtworkCardShowTitle,
+                          ),
+                          _PlayerCustomizationToggle(
+                            title: 'Show artist',
+                            value: appPrefs.artworkCardShowArtist,
+                            onChanged: prefsNotifier.setArtworkCardShowArtist,
+                          ),
+                          _PlayerCustomizationToggle(
+                            title: 'Show album',
+                            value: appPrefs.artworkCardShowAlbum,
+                            onChanged: prefsNotifier.setArtworkCardShowAlbum,
+                          ),
+                          _PlayerCustomizationToggle(
+                            title: 'Show file info',
+                            value: appPrefs.artworkCardShowFileInfo,
+                            onChanged: prefsNotifier.setArtworkCardShowFileInfo,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -710,6 +736,22 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
                             valueLabel:
                                 '${(appPrefs.immersiveFullViewScale * 100).round()}%',
                             onChanged: prefsNotifier.setImmersiveFullViewScale,
+                          ),
+                          const SizedBox(height: 6),
+                          _PlayerCustomizationToggle(
+                            title: 'Show title',
+                            value: appPrefs.immersiveShowTitle,
+                            onChanged: prefsNotifier.setImmersiveShowTitle,
+                          ),
+                          _PlayerCustomizationToggle(
+                            title: 'Show artist',
+                            value: appPrefs.immersiveShowArtist,
+                            onChanged: prefsNotifier.setImmersiveShowArtist,
+                          ),
+                          _PlayerCustomizationToggle(
+                            title: 'Show file info',
+                            value: appPrefs.immersiveShowFileInfo,
+                            onChanged: prefsNotifier.setImmersiveShowFileInfo,
                           ),
                         ],
                       ),
@@ -1881,9 +1923,16 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
                   artworkCardArtworkScale: appPrefs.artworkCardArtworkScale,
                   artworkCardTextScale: appPrefs.artworkCardTextScale,
                   artworkCardVerticalOffset: appPrefs.artworkCardVerticalOffset,
+                  artworkCardShowTitle: appPrefs.artworkCardShowTitle,
+                  artworkCardShowArtist: appPrefs.artworkCardShowArtist,
+                  artworkCardShowAlbum: appPrefs.artworkCardShowAlbum,
+                  artworkCardShowFileInfo: appPrefs.artworkCardShowFileInfo,
                   immersiveTextScale: appPrefs.immersiveTextScale,
                   immersiveVerticalOffset: appPrefs.immersiveVerticalOffset,
                   immersiveFullViewScale: appPrefs.immersiveFullViewScale,
+                  immersiveShowTitle: appPrefs.immersiveShowTitle,
+                  immersiveShowArtist: appPrefs.immersiveShowArtist,
+                  immersiveShowFileInfo: appPrefs.immersiveShowFileInfo,
                 ),
               ),
             );
@@ -1944,9 +1993,16 @@ class _AnimatedSongScene extends StatelessWidget {
   final double artworkCardArtworkScale;
   final double artworkCardTextScale;
   final double artworkCardVerticalOffset;
+  final bool artworkCardShowTitle;
+  final bool artworkCardShowArtist;
+  final bool artworkCardShowAlbum;
+  final bool artworkCardShowFileInfo;
   final double immersiveTextScale;
   final double immersiveVerticalOffset;
   final double immersiveFullViewScale;
+  final bool immersiveShowTitle;
+  final bool immersiveShowArtist;
+  final bool immersiveShowFileInfo;
 
   const _AnimatedSongScene({
     required this.song,
@@ -1980,9 +2036,16 @@ class _AnimatedSongScene extends StatelessWidget {
     this.artworkCardArtworkScale = 1.0,
     this.artworkCardTextScale = 1.0,
     this.artworkCardVerticalOffset = 0.0,
+    this.artworkCardShowTitle = true,
+    this.artworkCardShowArtist = true,
+    this.artworkCardShowAlbum = true,
+    this.artworkCardShowFileInfo = true,
     this.immersiveTextScale = 1.0,
     this.immersiveVerticalOffset = 0.0,
     this.immersiveFullViewScale = 1.0,
+    this.immersiveShowTitle = true,
+    this.immersiveShowArtist = true,
+    this.immersiveShowFileInfo = true,
   });
 
   @override
@@ -2547,17 +2610,19 @@ class _AnimatedSongScene extends StatelessWidget {
                         ),
                         child: _buildImmersiveSongHeader(context),
                       ),
-                      SizedBox(height: context.responsive(10.0, 12.0, 14.0)),
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: context.responsive(12.0, 16.0, 20.0),
+                      if (immersiveShowFileInfo) ...[
+                        SizedBox(height: context.responsive(10.0, 12.0, 14.0)),
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: context.responsive(12.0, 16.0, 20.0),
+                          ),
+                          child: buildFileInfoRow(
+                            song,
+                            lyricsMode,
+                            playerScreenMode,
+                          ),
                         ),
-                        child: buildFileInfoRow(
-                          song,
-                          lyricsMode,
-                          playerScreenMode,
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -2661,36 +2726,39 @@ class _AnimatedSongScene extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      song.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'ProductSans',
-                        fontSize: context.responsiveText(
-                          context.responsive(18.0, 19.0, 21.0) *
-                              immersiveTextScale,
+                    if (immersiveShowTitle)
+                      Text(
+                        song.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'ProductSans',
+                          fontSize: context.responsiveText(
+                            context.responsive(18.0, 19.0, 21.0) *
+                                immersiveTextScale,
+                          ),
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.12,
                         ),
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        height: 1.12,
                       ),
-                    ),
-                    SizedBox(height: context.responsive(6.0, 7.0, 8.0)),
-                    Text(
-                      song.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'ProductSans',
-                        fontSize: context.responsiveText(
-                          context.responsive(13.0, 14.0, 15.0) *
-                              immersiveTextScale,
+                    if (immersiveShowTitle && immersiveShowArtist)
+                      SizedBox(height: context.responsive(6.0, 7.0, 8.0)),
+                    if (immersiveShowArtist)
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'ProductSans',
+                          fontSize: context.responsiveText(
+                            context.responsive(13.0, 14.0, 15.0) *
+                                immersiveTextScale,
+                          ),
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.78),
                         ),
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.78),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -2710,35 +2778,40 @@ class _AnimatedSongScene extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                song.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: 'ProductSans',
-                  fontSize: context.responsiveText(
-                    context.responsive(22.0, 24.0, 28.0) * immersiveTextScale,
+              if (immersiveShowTitle)
+                Text(
+                  song.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'ProductSans',
+                    fontSize: context.responsiveText(
+                      context.responsive(22.0, 24.0, 28.0) * immersiveTextScale,
+                    ),
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    height: 1.08,
                   ),
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  height: 1.08,
                 ),
-              ),
-              SizedBox(height: context.responsive(10.0, 12.0, 14.0)),
-              Text(
-                song.artist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: 'ProductSans',
-                  fontSize: context.responsiveText(
-                    context.responsive(13.0, 14.0, 16.0) * immersiveTextScale,
+              if (immersiveShowTitle && immersiveShowArtist)
+                SizedBox(height: context.responsive(10.0, 12.0, 14.0)),
+              if (immersiveShowArtist)
+                Text(
+                  song.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'ProductSans',
+                    fontSize: context.responsiveText(
+                      context.responsive(13.0, 14.0, 16.0) *
+                          immersiveTextScale,
+                    ),
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.82),
                   ),
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withValues(alpha: 0.82),
                 ),
-              ),
-              SizedBox(height: context.responsive(10.0, 12.0, 14.0)),
+              if (immersiveShowTitle || immersiveShowArtist)
+                SizedBox(height: context.responsive(10.0, 12.0, 14.0)),
             ],
           ),
         ),
@@ -2855,8 +2928,10 @@ class _AnimatedSongScene extends StatelessWidget {
                     ),
                   ),
                 ),
-              buildFileInfoRow(song, lyricsMode, playerScreenMode),
-              SizedBox(height: playbackSpacing),
+              if (artworkCardShowFileInfo)
+                buildFileInfoRow(song, lyricsMode, playerScreenMode),
+              if (artworkCardShowFileInfo)
+                SizedBox(height: playbackSpacing),
               _buildPlaybackStack(context),
               SizedBox(height: directorySpacing),
             ],
@@ -2907,33 +2982,39 @@ class _AnimatedSongScene extends StatelessWidget {
 
     return Column(
       children: [
-        Text(
-          song.title,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontFamily: 'ProductSans',
-            fontSize: context.responsiveText(titleSize),
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            height: 1.08,
+        if (artworkCardShowTitle)
+          Text(
+            song.title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'ProductSans',
+              fontSize: context.responsiveText(titleSize),
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1.08,
+            ),
           ),
-        ),
-        SizedBox(height: titleToArtistSpacing),
-        Text(
-          song.artist,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontFamily: 'ProductSans',
-            fontSize: context.responsiveText(artistSize),
-            fontWeight: FontWeight.w500,
-            color: Colors.white.withValues(alpha: 0.78),
+        if (artworkCardShowTitle && artworkCardShowArtist)
+          SizedBox(height: titleToArtistSpacing),
+        if (artworkCardShowArtist)
+          Text(
+            song.artist,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'ProductSans',
+              fontSize: context.responsiveText(artistSize),
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.78),
+            ),
           ),
-        ),
-        if (song.album != null && song.album!.trim().isNotEmpty) ...[
+        if (artworkCardShowAlbum &&
+            (artworkCardShowTitle || artworkCardShowArtist) &&
+            song.album != null &&
+            song.album!.trim().isNotEmpty) ...[
           SizedBox(height: artistToAlbumSpacing),
           Container(
             padding: EdgeInsets.symmetric(
@@ -3286,6 +3367,44 @@ class _PlayerCustomizationGroup extends StatelessWidget {
   }
 }
 
+class _PlayerCustomizationToggle extends StatelessWidget {
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _PlayerCustomizationToggle({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'ProductSans',
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: context.adaptiveTextPrimary,
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppColors.accent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PlayerCustomizationSlider extends StatelessWidget {
   final String title;
   final double value;
@@ -3361,9 +3480,14 @@ class _PlayerLayoutPreview extends StatelessWidget {
   final double artworkCardArtworkScale;
   final double artworkCardTextScale;
   final double artworkCardVerticalOffset;
+  final bool artworkCardShowTitle;
+  final bool artworkCardShowArtist;
+  final bool artworkCardShowAlbum;
   final double immersiveTextScale;
   final double immersiveVerticalOffset;
   final double immersiveFullViewScale;
+  final bool immersiveShowTitle;
+  final bool immersiveShowArtist;
 
   const _PlayerLayoutPreview({
     required this.song,
@@ -3371,9 +3495,14 @@ class _PlayerLayoutPreview extends StatelessWidget {
     required this.artworkCardArtworkScale,
     required this.artworkCardTextScale,
     required this.artworkCardVerticalOffset,
+    this.artworkCardShowTitle = true,
+    this.artworkCardShowArtist = true,
+    this.artworkCardShowAlbum = true,
     required this.immersiveTextScale,
     required this.immersiveVerticalOffset,
     required this.immersiveFullViewScale,
+    this.immersiveShowTitle = true,
+    this.immersiveShowArtist = true,
   });
 
   @override
@@ -3430,32 +3559,35 @@ class _PlayerLayoutPreview extends StatelessWidget {
         children: [
           _PreviewAlbumArt(song: song, size: artSize, radius: 18),
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Text(
-              song?.title ?? 'Midnight Signal',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'ProductSans',
-                fontSize: 17 * artworkCardTextScale,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+          if (artworkCardShowTitle)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Text(
+                song?.title ?? 'Midnight Signal',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'ProductSans',
+                  fontSize: 17 * artworkCardTextScale,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            song?.artist ?? 'Flick Preview',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'ProductSans',
-              fontSize: 12 * artworkCardTextScale,
-              color: Colors.white.withValues(alpha: 0.72),
+          if (artworkCardShowTitle && artworkCardShowArtist)
+            const SizedBox(height: 4),
+          if (artworkCardShowArtist)
+            Text(
+              song?.artist ?? 'Flick Preview',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'ProductSans',
+                fontSize: 12 * artworkCardTextScale,
+                color: Colors.white.withValues(alpha: 0.72),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -3489,29 +3621,32 @@ class _PlayerLayoutPreview extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        song?.title ?? 'Midnight Signal',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'ProductSans',
-                          fontSize: 18 * immersiveTextScale,
-                          fontWeight: FontWeight.w700,
-                          height: 1.05,
-                          color: Colors.white,
+                      if (immersiveShowTitle)
+                        Text(
+                          song?.title ?? 'Midnight Signal',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'ProductSans',
+                            fontSize: 18 * immersiveTextScale,
+                            fontWeight: FontWeight.w700,
+                            height: 1.05,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        song?.artist ?? 'Flick Preview',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'ProductSans',
-                          fontSize: 12 * immersiveTextScale,
-                          color: Colors.white.withValues(alpha: 0.76),
+                      if (immersiveShowTitle && immersiveShowArtist)
+                        const SizedBox(height: 5),
+                      if (immersiveShowArtist)
+                        Text(
+                          song?.artist ?? 'Flick Preview',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'ProductSans',
+                            fontSize: 12 * immersiveTextScale,
+                            color: Colors.white.withValues(alpha: 0.76),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
