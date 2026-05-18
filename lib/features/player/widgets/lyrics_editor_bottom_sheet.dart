@@ -388,6 +388,7 @@ class _LyricsEditorBottomSheetState extends State<LyricsEditorBottomSheet> {
       final lrcContent = widget.lyricsService.buildLrcContent(
         lines: normalizedLines,
         song: widget.song,
+        length: widget.song.duration,
       );
       final result = await widget.lyricsService.saveLyricsForSong(
         song: widget.song,

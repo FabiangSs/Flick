@@ -146,13 +146,36 @@ class _OnlineLyricsSearchSheetState extends State<OnlineLyricsSearchSheet> {
     });
   }
 
+  String _injectLengthTag(String lrcContent, Duration length) {
+    final lengthTag = widget.lyricsService.formatLengthTag(length);
+    final metadataPattern = RegExp(r'^\s*\[[a-zA-Z]+:.*\]\s*$');
+    final lines = lrcContent.split('\n');
+    var lastMetadataIndex = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (metadataPattern.hasMatch(lines[i])) {
+        lastMetadataIndex = i;
+      } else if (lastMetadataIndex != -1) {
+        break;
+      }
+    }
+    if (lastMetadataIndex >= 0) {
+      lines.insert(lastMetadataIndex + 1, lengthTag);
+      return lines.join('\n');
+    }
+    return '$lengthTag\n$lrcContent';
+  }
+
   Future<void> _saveResult(OnlineLyricsResult result) async {
     setState(() => _isSaving = true);
 
     final isSynced = result.hasSyncedLyrics;
-    final content = isSynced ? result.syncedLyrics! : result.plainLyrics!;
+    String content = isSynced ? result.syncedLyrics! : result.plainLyrics!;
     final fileName =
         isSynced ? 'online.lrc' : 'online.txt';
+
+    if (isSynced && widget.song.duration.inSeconds > 0) {
+      content = _injectLengthTag(content, widget.song.duration);
+    }
 
     await widget.lyricsService.importLyricsForSong(
       song: widget.song,
