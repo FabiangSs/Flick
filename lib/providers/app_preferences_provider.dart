@@ -280,6 +280,14 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
     state = state.copyWith(widgetAccentColor: value);
     await ref.read(appPreferencesServiceProvider).setWidgetAccentColor(value);
   }
+
+  Future<void> setLyricsMatchAudioFilename(bool value) async {
+    if (state.lyricsMatchAudioFilename == value) return;
+    state = state.copyWith(lyricsMatchAudioFilename: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setLyricsMatchAudioFilename(value);
+  }
 }
 
 final appPreferencesProvider =
