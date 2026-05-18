@@ -38,6 +38,8 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
   static const double _listItemExtent = 80;
   static const int _folderGridPageSize = 18;
   static const double _folderGridLoadMoreThreshold = 320;
+  static const int _listPageSize = 50;
+  static const double _listLoadMoreThreshold = 320;
 
   int _selectedIndex = 0;
   final TextEditingController _searchController = TextEditingController();
@@ -55,6 +57,8 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
   int _visibleFolderCount = _folderGridPageSize;
   int _totalFolderCount = 0;
   String _folderPaginationSignature = '';
+  int _visibleListCount = _listPageSize;
+  String _listPaginationSignature = '';
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
 
@@ -207,6 +211,14 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
                         }).toList();
                       }
                       _cachedDisplaySongs = songs;
+
+                      if (!isFolderMode) {
+                        final sig = '${songs.length}:${songs.isNotEmpty ? songs.first.id : ''}';
+                        if (sig != _listPaginationSignature) {
+                          _listPaginationSignature = sig;
+                          _resetListPagination();
+                        }
+                      }
 
                       if (songs.isEmpty && _searchQuery.isEmpty) {
                         return _buildEmptyState();
@@ -441,8 +453,9 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
           0,
           AppConstants.navBarHeight + 120,
         ),
-        itemCount: songs.length,
+        itemCount: _visibleListCount,
         itemBuilder: (context, index) {
+          if (index >= songs.length) return const SizedBox.shrink();
           final song = songs[index];
           final isSelected = index == _selectedIndex;
           final isMultiSelected = _selectedIds.contains(song.id);
@@ -862,6 +875,12 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
 
   void _onListScroll() {
     _showFastIndexOverlay();
+    if (!_listScrollController.hasClients) return;
+    final position = _listScrollController.position;
+    if (position.pixels >=
+        position.maxScrollExtent - _listLoadMoreThreshold) {
+      _loadMoreListSongs();
+    }
   }
 
   void _onFolderGridScroll() {
@@ -885,6 +904,24 @@ class _SongsScreenState extends ConsumerState<SongsScreen> {
         _totalFolderCount,
       );
     });
+  }
+
+  void _loadMoreListSongs() {
+    if (!mounted || _visibleListCount >= _cachedDisplaySongs.length) {
+      return;
+    }
+    setState(() {
+      _visibleListCount = min(
+        _visibleListCount + _listPageSize,
+        _cachedDisplaySongs.length,
+      );
+    });
+  }
+
+  void _resetListPagination() {
+    if (_visibleListCount != _listPageSize) {
+      _visibleListCount = _listPageSize;
+    }
   }
 
   Future<void> _playSongAndOpenPlayer({
@@ -1704,6 +1741,7 @@ class _FolderCardState extends State<_FolderCard>
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _tiltAnimation;
+  List<_ArtEntry> _cachedArtworks = const [];
 
   @override
   void initState() {
@@ -1720,6 +1758,15 @@ class _FolderCardState extends State<_FolderCard>
       begin: 0.0,
       end: 0.02,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _cachedArtworks = _computeArtworks(widget.folder.songs);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FolderCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.folder.songs, widget.folder.songs)) {
+      _cachedArtworks = _computeArtworks(widget.folder.songs);
+    }
   }
 
   @override
@@ -1728,10 +1775,10 @@ class _FolderCardState extends State<_FolderCard>
     super.dispose();
   }
 
-  List<_ArtEntry> _getUniqueArtworks() {
+  static List<_ArtEntry> _computeArtworks(List<Song> songs) {
     final seen = <String>{};
     final result = <_ArtEntry>[];
-    for (final song in widget.folder.songs) {
+    for (final song in songs) {
       final art = song.albumArt;
       if (art != null && art.isNotEmpty && seen.add(art)) {
         result.add(_ArtEntry(art, song.filePath));
@@ -1746,7 +1793,7 @@ class _FolderCardState extends State<_FolderCard>
     final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final cardWidth = context.scaleSize(AppConstants.cardWidthMd);
     final artworkTargetWidth = (cardWidth * devicePixelRatio).round();
-    final artworks = _getUniqueArtworks();
+    final artworks = _cachedArtworks;
     final padded = List<_ArtEntry>.from(artworks);
     while (padded.length < 4) {
       padded.add(const _ArtEntry(null, null));
@@ -1961,47 +2008,49 @@ class _ArtEntry {
   const _ArtEntry(this.art, this.source);
 }
 
-class _FolderDetailScreen extends ConsumerWidget {
+class _FolderDetailScreen extends ConsumerStatefulWidget {
   final FolderGroup folder;
 
   const _FolderDetailScreen({required this.folder});
 
-  List<_ArtEntry> _getUniqueArtworks() {
-    final seen = <String>{};
-    final result = <_ArtEntry>[];
-    for (final song in folder.songs) {
-      final art = song.albumArt;
-      if (art != null && art.isNotEmpty && seen.add(art)) {
-        result.add(_ArtEntry(art, song.filePath));
-      }
-      if (result.length >= 4) break;
-    }
-    return result;
+  @override
+  ConsumerState<_FolderDetailScreen> createState() =>
+      _FolderDetailScreenState();
+}
+
+class _FolderDetailScreenState extends ConsumerState<_FolderDetailScreen> {
+  late final List<_ArtEntry> _cachedArtworks;
+
+  @override
+  void initState() {
+    super.initState();
+    _cachedArtworks = _FolderCardState._computeArtworks(widget.folder.songs);
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final artworks = _getUniqueArtworks();
+  Widget build(BuildContext context) {
+    final artworks = _cachedArtworks;
     final padded = List<_ArtEntry>.from(artworks);
-    final totalDuration = folder.songs.fold<Duration>(
-      Duration.zero,
-      (sum, song) => sum + song.duration,
-    );
-    final uniqueArtists = folder.songs
-        .map((song) => song.artist.trim())
-        .where((artist) => artist.isNotEmpty)
-        .toSet()
-        .length;
-    final uniqueFormats = folder.songs
-        .map((song) => song.fileType.toUpperCase())
-        .where((format) => format.isNotEmpty)
-        .toSet()
-        .length;
-    final totalAlbums = folder.songs
-        .map((song) => (song.album ?? '').trim())
-        .where((album) => album.isNotEmpty)
-        .toSet()
-        .length;
+       final f = widget.folder;
+        final totalDuration = f.songs.fold<Duration>(
+          Duration.zero,
+          (sum, song) => sum + song.duration,
+        );
+        final uniqueArtists = f.songs
+            .map((song) => song.artist.trim())
+            .where((artist) => artist.isNotEmpty)
+            .toSet()
+            .length;
+        final uniqueFormats = f.songs
+            .map((song) => song.fileType.toUpperCase())
+            .where((format) => format.isNotEmpty)
+            .toSet()
+            .length;
+        final totalAlbums = f.songs
+            .map((song) => (song.album ?? '').trim())
+            .where((album) => album.isNotEmpty)
+            .toSet()
+            .length;
     while (padded.length < 4) {
       padded.add(const _ArtEntry(null, null));
     }
@@ -2078,9 +2127,9 @@ class _FolderDetailScreen extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: AppConstants.spacingSm),
-                        Text(
-                          folder.name,
-                          style: Theme.of(context).textTheme.headlineMedium
+                      Text(
+                        f.name,
+                        style: Theme.of(context).textTheme.headlineMedium
                               ?.copyWith(
                                 color: context.adaptiveTextPrimary,
                                 fontWeight: FontWeight.bold,
@@ -2101,7 +2150,7 @@ class _FolderDetailScreen extends ConsumerWidget {
                           children: [
                             _FolderSummaryPill(
                               icon: LucideIcons.music4,
-                              label: '${folder.songs.length} tracks',
+                               label: '${f.songs.length} tracks',
                             ),
                             _FolderSummaryPill(
                               icon: LucideIcons.clock3,
@@ -2177,12 +2226,10 @@ class _FolderDetailScreen extends ConsumerWidget {
                               icon: LucideIcons.play,
                               label: 'Play All',
                               emphasized: true,
-                              onTap: () => _playFolder(
-                                folder.songs.first,
-                                folder,
-                                ref,
-                                context,
-                              ),
+                               onTap: () => _playFolder(
+                                 f.songs.first,
+                                 f,
+                               ),
                             ),
                           ),
                           const SizedBox(width: AppConstants.spacingSm),
@@ -2190,8 +2237,7 @@ class _FolderDetailScreen extends ConsumerWidget {
                             child: _FolderActionButton(
                               icon: LucideIcons.shuffle,
                               label: 'Shuffle',
-                              onTap: () =>
-                                  _shufflePlayFolder(folder, ref, context),
+                               onTap: () => _shufflePlayFolder(f),
                             ),
                           ),
                         ],
@@ -2220,8 +2266,8 @@ class _FolderDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    '${folder.songs.length} songs',
+                   Text(
+                     '${f.songs.length} songs',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: context.adaptiveTextSecondary,
                     ),
@@ -2235,8 +2281,8 @@ class _FolderDetailScreen extends ConsumerWidget {
               bottom: AppConstants.navBarHeight + 120,
             ),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final song = folder.songs[index];
+               delegate: SliverChildBuilderDelegate((context, index) {
+                 final song = f.songs[index];
                 return Padding(
                   key: ValueKey(song.id),
                   padding: const EdgeInsets.fromLTRB(
@@ -2248,12 +2294,12 @@ class _FolderDetailScreen extends ConsumerWidget {
                   child: _FolderDetailTrackTile(
                     song: song,
                     index: index,
-                    onTap: () => _playFolder(song, folder, ref, context),
+                     onTap: () => _playFolder(song, f),
                     onLongPress: () =>
                         SongActionsBottomSheet.show(context, song),
                   ),
                 );
-              }, childCount: folder.songs.length),
+               }, childCount: f.songs.length),
             ),
           ),
         ],
@@ -2291,17 +2337,13 @@ class _FolderDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _shufflePlayFolder(
-    FolderGroup folder,
-    WidgetRef ref,
-    BuildContext context,
-  ) async {
+  Future<void> _shufflePlayFolder(FolderGroup folder) async {
     if (folder.songs.isEmpty) return;
     final shuffled = List<Song>.from(folder.songs)..shuffle(Random());
     await ref
         .read(playerProvider.notifier)
         .play(shuffled.first, playlist: shuffled);
-    if (context.mounted) {
+    if (mounted) {
       await NavigationHelper.navigateToFullPlayer(
         context,
         heroTag: 'folder_shuffle_${folder.key}',
@@ -2309,14 +2351,9 @@ class _FolderDetailScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _playFolder(
-    Song song,
-    FolderGroup folder,
-    WidgetRef ref,
-    BuildContext context,
-  ) async {
+  Future<void> _playFolder(Song song, FolderGroup folder) async {
     await ref.read(playerProvider.notifier).play(song, playlist: folder.songs);
-    if (context.mounted) {
+    if (mounted) {
       await NavigationHelper.navigateToFullPlayer(
         context,
         heroTag: 'folder_song_${song.id}',
