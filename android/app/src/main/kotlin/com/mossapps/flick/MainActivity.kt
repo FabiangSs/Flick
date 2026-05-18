@@ -1,5 +1,21 @@
 package com.mossapps.flick
 
+// Audio capability mapping:
+//   Kotlin "usbDac"      → Rust AudioCapability::UsbDac      / BackendType::UsbDirect
+//   Kotlin "hiResInternal" → Rust AudioCapability::HiResInternal / BackendType::DapNative or MixerBitPerfect
+//   Kotlin "standard"    → Rust AudioCapability::Standard     / BackendType::ResampledFallback
+//
+// Route type mapping:
+//   Kotlin "usb"       → USB DAC/AMP (direct or Android-managed)
+//   Kotlin "internal"  → Built-in audio (could be DAP internal DAC or phone)
+//   Kotlin "wired"     → Wired headphones/line out
+//   Kotlin "bluetooth" → Bluetooth audio
+//   Kotlin "dock"      → Dock audio
+//   Kotlin "unknown"   → Unidentified route
+//
+// DAP brand detection happens in Rust (audio/device.rs DAP_REGISTRY) and Dart
+// (android_audio_device_service.dart isLikelyDap). Kotlin does NOT detect DAP brands.
+
 import android.Manifest
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
