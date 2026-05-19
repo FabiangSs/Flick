@@ -24,6 +24,9 @@ import 'package:flick/services/rust_audio_engine.dart';
 import 'package:flick/services/rust_audio_service.dart';
 import 'package:flick/services/app_preferences_service.dart';
 import 'package:flick/services/uac2_preferences_service.dart';
+import 'package:flick/services/color_extraction_service.dart';
+import 'package:flick/services/album_color_mode_preference_service.dart';
+import 'package:flick/models/album_color_mode.dart';
 import 'package:flick/services/uac2_service.dart';
 import 'package:flick/services/alac_converter_service.dart';
 
@@ -242,6 +245,8 @@ class PlayerService {
   final AppPreferencesService _appPreferencesService = AppPreferencesService();
   final RustAudioService _rustAudioService = RustAudioService();
   final Uac2Service _uac2Service = Uac2Service.instance;
+  final ColorExtractionService _colorExtractionService = ColorExtractionService();
+  final AlbumColorModePreferenceService _albumColorModePreferenceService = AlbumColorModePreferenceService();
   bool _priorityAnchorActive = false;
   late final AudioSessionManager _sessionManager;
   late final AudioEngineManager _playbackManager;
@@ -350,6 +355,10 @@ class PlayerService {
 
   // Track last notification update time to throttle updates
   DateTime _lastNotificationUpdate = DateTime.now();
+
+  // Cache album color for notifications to avoid re-extracting on every update
+  String? _lastNotificationColorSongId;
+  int? _lastNotificationColor;
 
   final ValueNotifier<int> favoriteNotificationToggleNotifier = ValueNotifier(0);
 
@@ -1856,6 +1865,26 @@ class PlayerService {
       }
     }
 
+    int? notificationColor;
+    try {
+      final colorMode = await _albumColorModePreferenceService.getMode();
+      if (colorMode != AlbumColorMode.off && song.albumArt != null && song.albumArt!.isNotEmpty) {
+        final songId = song.id;
+        if (songId == _lastNotificationColorSongId && _lastNotificationColor != null) {
+          notificationColor = _lastNotificationColor;
+        } else {
+          final color = await _colorExtractionService.extractDominantColor(song.albumArt);
+          if (color != null) {
+            notificationColor = color.toARGB32();
+            _lastNotificationColor = notificationColor;
+            _lastNotificationColorSongId = songId;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to extract notification color: $e');
+    }
+
     await _notificationService.updateNotification(
       song: song,
       isPlaying: isPlayingNotifier.value,
@@ -1863,6 +1892,7 @@ class PlayerService {
       position: positionNotifier.value,
       isShuffle: isShuffleNotifier.value,
       isFavorite: isFav,
+      color: notificationColor,
     );
   }
 
