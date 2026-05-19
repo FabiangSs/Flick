@@ -441,7 +441,7 @@ class _AlbumArtPickerBottomSheetState extends State<AlbumArtPickerBottomSheet> {
           crossAxisCount: 3,
           crossAxisSpacing: AppConstants.spacingSm,
           mainAxisSpacing: AppConstants.spacingSm,
-          childAspectRatio: 0.78,
+          childAspectRatio: 0.62,
         ),
         itemBuilder: (context, index) {
           final candidate = _candidates[index];
