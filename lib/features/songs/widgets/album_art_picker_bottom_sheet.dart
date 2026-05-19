@@ -25,7 +25,7 @@ class AlbumArtPickerBottomSheet extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => AppBottomSheetSurface(
-        maxHeightRatio: 0.88,
+        maxHeightRatio: 0.95,
         child: AlbumArtPickerBottomSheet(song: song),
       ),
     );
@@ -431,13 +431,18 @@ class _AlbumArtPickerBottomSheetState extends State<AlbumArtPickerBottomSheet> {
       );
     }
 
-    return SizedBox(
-      height: 176,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
+    return Container(
+      constraints: const BoxConstraints(minHeight: 400),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         itemCount: _candidates.length,
-        separatorBuilder: (_, _) =>
-            const SizedBox(width: AppConstants.spacingSm),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: AppConstants.spacingSm,
+          mainAxisSpacing: AppConstants.spacingSm,
+          childAspectRatio: 0.78,
+        ),
         itemBuilder: (context, index) {
           final candidate = _candidates[index];
           final isSelected = index == _selectedCandidateIndex;
@@ -451,7 +456,6 @@ class _AlbumArtPickerBottomSheetState extends State<AlbumArtPickerBottomSheet> {
                   },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              width: 132,
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: AppColors.surfaceLight,
@@ -466,9 +470,8 @@ class _AlbumArtPickerBottomSheetState extends State<AlbumArtPickerBottomSheet> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: SizedBox(
-                      width: 116,
-                      height: 116,
+                    child: AspectRatio(
+                      aspectRatio: 1,
                       child: CachedImageWidget(
                         imagePath: candidate.previewUrl,
                         fit: BoxFit.cover,
