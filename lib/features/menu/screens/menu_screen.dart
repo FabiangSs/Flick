@@ -10,6 +10,7 @@ import 'package:flick/core/theme/app_colors.dart';
 import 'package:flick/core/utils/navigation_helper.dart';
 import 'package:flick/core/utils/responsive.dart';
 import 'package:flick/data/repositories/recently_played_repository.dart';
+import 'package:flick/data/repositories/song_repository.dart';
 import 'package:flick/features/albums/screens/albums_screen.dart';
 import 'package:flick/features/artists/screens/artists_screen.dart';
 import 'package:flick/features/favorites/screens/favorites_screen.dart';
@@ -1071,6 +1072,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     for (final song in allSongs) {
       final artist = _normalizeArtist(song.artist);
       songsByArtist.putIfAbsent(artist, () => []).add(song);
+    }
+
+    for (final entry in songsByArtist.entries) {
+      songsByArtist[entry.key] = SongRepository.sortSongsByAlbum(entry.value);
     }
 
     final recentTracks = _dedupeSongs(
