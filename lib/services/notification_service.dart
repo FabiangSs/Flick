@@ -71,9 +71,10 @@ class NotificationService {
     Duration? position,
     bool isShuffle = false,
     bool isFavorite = false,
+    int? color,
   }) async {
     try {
-      await _channel.invokeMethod('showNotification', {
+      final args = <String, dynamic>{
         'title': song.title,
         'artist': song.artist,
         'albumArtPath': song.albumArt,
@@ -82,7 +83,9 @@ class NotificationService {
         'position': position?.inMilliseconds ?? 0,
         'isShuffle': isShuffle,
         'isFavorite': isFavorite,
-      });
+      };
+      if (color != null) args['color'] = color;
+      await _channel.invokeMethod('showNotification', args);
       _isNotificationVisible = true;
     } catch (e) {
       debugPrint('Failed to show notification: $e');
@@ -115,6 +118,7 @@ class NotificationService {
     Duration? position,
     bool? isShuffle,
     bool? isFavorite,
+    int? color,
   }) async {
     try {
       final args = <String, dynamic>{
@@ -128,6 +132,7 @@ class NotificationService {
 
       if (isShuffle != null) args['isShuffle'] = isShuffle;
       if (isFavorite != null) args['isFavorite'] = isFavorite;
+      if (color != null) args['color'] = color;
 
       await _channel.invokeMethod('updateNotification', args);
       _isNotificationVisible = true;
