@@ -42,6 +42,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flick/widgets/common/cached_image_widget.dart';
 import 'package:flick/widgets/common/display_mode_wrapper.dart';
 import 'package:flick/widgets/uac2/uac2_error_notification.dart';
+import 'package:flick/widgets/uac2/iso_volume_popup.dart';
+import 'package:flick/services/uac2_preferences_service.dart';
+import 'package:flick/providers/providers.dart';
 
 class FullPlayerScreen extends ConsumerStatefulWidget {
   final Object heroTag;
@@ -86,6 +89,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
   PlayerScreenMode _playerScreenMode = PlayerScreenMode.immersive;
   int _immersiveAutoFullViewDelaySeconds = 0;
   Timer? _immersiveFullViewTimer;
+  final GlobalKey _usbVolumeButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -1807,6 +1811,14 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
           inactiveBg: inactiveBg,
           inactiveBorder: inactiveBorder,
         );
+      case PlayerActionButton.usbVolume:
+        return _buildUsbVolumeButton(
+          actionPadding: actionPadding,
+          actionRadius: actionRadius,
+          actionIconSize: actionIconSize,
+          inactiveBg: inactiveBg,
+          inactiveBorder: inactiveBorder,
+        );
     }
   }
 
@@ -2099,6 +2111,49 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
           ),
           child: Icon(
             LucideIcons.share2,
+            color: Colors.white.withValues(alpha: 0.96),
+            size: actionIconSize,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsbVolumeButton({
+    required EdgeInsets actionPadding,
+    required double actionRadius,
+    required double actionIconSize,
+    required Color inactiveBg,
+    required Color inactiveBorder,
+  }) {
+    final enginePref = ref.watch(audioEnginePreferenceProvider);
+    final isIsochronous = enginePref.when(
+      data: (e) => e == AudioEnginePreference.isochronousUsb,
+      loading: () => false,
+      error: (_, _) => false,
+    );
+
+    if (!isIsochronous) {
+      return SizedBox(
+        width: actionIconSize + actionPadding.horizontal,
+        height: actionIconSize + actionPadding.vertical,
+      );
+    }
+
+    return Tooltip(
+      message: 'USB Volume',
+      child: GestureDetector(
+        key: _usbVolumeButtonKey,
+        onTap: () => showIsoVolumePopup(context, _usbVolumeButtonKey),
+        child: Container(
+          padding: actionPadding,
+          decoration: BoxDecoration(
+            color: inactiveBg,
+            borderRadius: BorderRadius.circular(actionRadius),
+            border: Border.all(color: inactiveBorder),
+          ),
+          child: Icon(
+            LucideIcons.volume2,
             color: Colors.white.withValues(alpha: 0.96),
             size: actionIconSize,
           ),
