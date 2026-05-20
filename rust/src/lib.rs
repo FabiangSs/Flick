@@ -189,6 +189,7 @@ pub extern "system" fn Java_com_mossapps_flick_MainActivity_nativeSetRustDirectU
             sample_rate: sample_rate as u32,
             bit_depth: bit_depth as u8,
             channels: channels as u16,
+            is_dop: false,
         })
     };
 
