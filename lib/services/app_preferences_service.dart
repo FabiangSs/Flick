@@ -37,6 +37,9 @@ class AppPreferences {
   final bool widgetShowAlbumArt;
   final bool widgetShowArtist;
   final String widgetAccentColor;
+  final String widgetFlagshipTheme;
+  final String widgetFlagshipAccent;
+  final bool widgetFlagshipShowArtist;
   final bool lyricsMatchAudioFilename;
   final String leftActionButton;
   final String rightActionButton;
@@ -78,6 +81,9 @@ class AppPreferences {
     this.widgetShowAlbumArt = true,
     this.widgetShowArtist = true,
     this.widgetAccentColor = 'white',
+    this.widgetFlagshipTheme = 'art_dominant',
+    this.widgetFlagshipAccent = 'white',
+    this.widgetFlagshipShowArtist = true,
     this.lyricsMatchAudioFilename = false,
     this.leftActionButton = 'lyrics',
     this.rightActionButton = 'favorites',
@@ -120,6 +126,9 @@ class AppPreferences {
     bool? widgetShowAlbumArt,
     bool? widgetShowArtist,
     String? widgetAccentColor,
+    String? widgetFlagshipTheme,
+    String? widgetFlagshipAccent,
+    bool? widgetFlagshipShowArtist,
     bool? lyricsMatchAudioFilename,
     String? leftActionButton,
     String? rightActionButton,
@@ -173,6 +182,10 @@ class AppPreferences {
       widgetShowAlbumArt: widgetShowAlbumArt ?? this.widgetShowAlbumArt,
       widgetShowArtist: widgetShowArtist ?? this.widgetShowArtist,
       widgetAccentColor: widgetAccentColor ?? this.widgetAccentColor,
+      widgetFlagshipTheme: widgetFlagshipTheme ?? this.widgetFlagshipTheme,
+      widgetFlagshipAccent: widgetFlagshipAccent ?? this.widgetFlagshipAccent,
+      widgetFlagshipShowArtist:
+          widgetFlagshipShowArtist ?? this.widgetFlagshipShowArtist,
       lyricsMatchAudioFilename:
           lyricsMatchAudioFilename ?? this.lyricsMatchAudioFilename,
       leftActionButton: leftActionButton ?? this.leftActionButton,
@@ -218,6 +231,9 @@ class AppPreferencesService {
   static const _widgetShowAlbumArtKey = 'widget_show_album_art';
   static const _widgetShowArtistKey = 'widget_show_artist';
   static const _widgetAccentColorKey = 'widget_accent_color';
+  static const _widgetFlagshipThemeKey = 'widget_flagship_theme';
+  static const _widgetFlagshipAccentKey = 'widget_flagship_accent';
+  static const _widgetFlagshipShowArtistKey = 'widget_flagship_show_artist';
   static const _lyricsMatchAudioFilenameKey = 'lyrics_match_audio_filename';
   static const _leftActionButtonKey = 'left_action_button';
   static const _rightActionButtonKey = 'right_action_button';
@@ -273,6 +289,12 @@ class AppPreferencesService {
       widgetShowArtist: prefs.getBool(_widgetShowArtistKey) ?? true,
       widgetAccentColor:
           prefs.getString(_widgetAccentColorKey) ?? 'white',
+      widgetFlagshipTheme:
+          prefs.getString(_widgetFlagshipThemeKey) ?? 'art_dominant',
+      widgetFlagshipAccent:
+          prefs.getString(_widgetFlagshipAccentKey) ?? 'white',
+      widgetFlagshipShowArtist:
+          prefs.getBool(_widgetFlagshipShowArtistKey) ?? true,
       lyricsMatchAudioFilename:
           prefs.getBool(_lyricsMatchAudioFilenameKey) ?? false,
       leftActionButton:
@@ -590,6 +612,36 @@ class AppPreferencesService {
   Future<void> setWidgetAccentColor(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_widgetAccentColorKey, value);
+  }
+
+  Future<String> getWidgetFlagshipTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_widgetFlagshipThemeKey) ?? 'art_dominant';
+  }
+
+  Future<void> setWidgetFlagshipTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_widgetFlagshipThemeKey, value);
+  }
+
+  Future<String> getWidgetFlagshipAccent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_widgetFlagshipAccentKey) ?? 'white';
+  }
+
+  Future<void> setWidgetFlagshipAccent(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_widgetFlagshipAccentKey, value);
+  }
+
+  Future<bool> getWidgetFlagshipShowArtist() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_widgetFlagshipShowArtistKey) ?? true;
+  }
+
+  Future<void> setWidgetFlagshipShowArtist(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_widgetFlagshipShowArtistKey, value);
   }
 
   Future<bool> getLyricsMatchAudioFilename() async {
