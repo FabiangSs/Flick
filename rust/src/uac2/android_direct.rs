@@ -223,6 +223,7 @@ pub struct AndroidDirectUsbPlaybackFormat {
     pub sample_rate: u32,
     pub bit_depth: u8,
     pub channels: u16,
+    pub is_dop: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1032,6 +1033,40 @@ pub fn set_android_usb_playback_format(
     Ok(())
 }
 
+pub fn set_android_usb_dop_mode(
+    is_dop: bool,
+    carrier_rate: u32,
+    bit_depth: u8,
+) -> Result<(), String> {
+    let mut guard = DIRECT_USB_STATE.lock();
+    let Some(state) = guard.as_mut() else {
+        return Err("No Android direct USB DAC is registered".to_string());
+    };
+
+    let current = state.playback_format.unwrap_or(AndroidDirectUsbPlaybackFormat {
+        sample_rate: carrier_rate,
+        bit_depth,
+        channels: 2,
+        is_dop: false,
+    });
+
+    let dop_format = AndroidDirectUsbPlaybackFormat {
+        sample_rate: carrier_rate,
+        bit_depth: if is_dop { bit_depth } else { current.bit_depth },
+        channels: current.channels,
+        is_dop,
+    };
+    let sanitized = sanitize_android_usb_playback_format(dop_format);
+
+    state.playback_format = Some(sanitized);
+    state.requested_playback_format = Some(sanitized);
+    state.clock_status = None;
+    state.clock_control_attempted = false;
+    state.clock_control_succeeded = false;
+    state.clock_verification_passed = false;
+    Ok(())
+}
+
 pub fn set_android_usb_lock_enabled(enabled: bool) -> Result<(), String> {
     let stream_active = {
         let mut guard = DIRECT_USB_STATE.lock();
@@ -1703,13 +1738,22 @@ fn candidate_rates_from_supported_ranges(
 fn sanitize_android_usb_playback_format(
     playback_format: AndroidDirectUsbPlaybackFormat,
 ) -> AndroidDirectUsbPlaybackFormat {
-    AndroidDirectUsbPlaybackFormat {
-        sample_rate: playback_format.sample_rate.max(8_000),
-        bit_depth: match playback_format.bit_depth {
+    let bit_depth = if playback_format.is_dop {
+        match playback_format.bit_depth {
+            24 | 32 => playback_format.bit_depth,
+            _ => 24,
+        }
+    } else {
+        match playback_format.bit_depth {
             16 | 24 | 32 => playback_format.bit_depth,
             _ => 16,
-        },
+        }
+    };
+    AndroidDirectUsbPlaybackFormat {
+        sample_rate: playback_format.sample_rate.max(8_000),
+        bit_depth,
         channels: playback_format.channels.max(1),
+        is_dop: playback_format.is_dop,
     }
 }
 
@@ -3773,7 +3817,11 @@ fn run_usb_render_loop(
             continue;
         }
 
-        if let Err(error) =
+        if playback_format.is_dop {
+            for (dst, src) in pcm_samples.iter_mut().zip(render_buffer.iter()) {
+                *dst = src.to_bits() as i32;
+            }
+        } else if let Err(error) =
             convert_f32_to_pcm_samples(&render_buffer, &mut pcm_samples, playback_format.bit_depth)
         {
             let message = format!("Android USB direct PCM render conversion failed: {}", error);
