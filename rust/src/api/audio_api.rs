@@ -5,9 +5,12 @@
 
 use crate::audio::commands::{AudioEvent, PlaybackState};
 use crate::audio::decoder::{probe_file, DecoderThread};
+use crate::audio::decoder_handle::{DecoderHandle, detect_file_type};
 #[cfg(target_os = "android")]
 use crate::audio::device::current_device_profile;
+use crate::audio::dsd_engine::{DsdDecoderThread, DsdOutputMode, FilterQuality};
 use crate::audio::manager::{AudioCapability, AudioCapabilitySnapshot, AudioEngine, EngineManager};
+use crate::audio::wavpack_thread::WavpackDecoderThread;
 use log::{info as log_info, warn as log_warn};
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -66,25 +69,55 @@ fn prepare_decoder_source(
     path: &PathBuf,
     output_sample_rate: u32,
     output_channels: usize,
-) -> Result<(crate::audio::source::AudioSource, DecoderThread), String> {
-    let probe_result = probe_file(path.as_path())
-        .map_err(|error| format!("Failed to probe {}: {}", path.display(), error))?;
-    let file_rate = probe_result.source_info.original_sample_rate;
-    if output_sample_rate != file_rate {
-        log_warn!(
-            "[AUDIO] engine_sample_rate_hz={} decoded_file_sample_rate_hz={} — decoder resampling active",
-            output_sample_rate,
-            file_rate
-        );
-    } else {
-        log_info!(
-            "[AUDIO] engine_sample_rate_hz matches decoded_file_sample_rate_hz ({} Hz); decoder resampling off",
-            file_rate
-        );
-    }
+) -> Result<(crate::audio::source::AudioSource, DecoderHandle), String> {
+    match detect_file_type(path) {
+        crate::audio::decoder_handle::FileType::Dsd => {
+            let (source, thread) = DsdDecoderThread::spawn(
+                path.clone(),
+                DsdOutputMode::PcmDecimation,
+                output_sample_rate,
+                FilterQuality::Normal,
+                output_channels,
+            )
+            .map_err(|e| format!("Failed to decode DSD {}: {}", path.display(), e))?;
+            Ok((source, DecoderHandle::Dsd(thread)))
+        }
+        crate::audio::decoder_handle::FileType::WavPack => {
+            let (source, handle) = WavpackDecoderThread::spawn(
+                path.clone(),
+                output_sample_rate,
+                output_channels,
+            )
+            .map_err(|e| format!("Failed to decode WavPack {}: {}", path.display(), e))?;
+            Ok((source, handle))
+        }
+        crate::audio::decoder_handle::FileType::Standard => {
+            let probe_result = probe_file(path.as_path())
+                .map_err(|error| format!("Failed to probe {}: {}", path.display(), error))?;
+            let file_rate = probe_result.source_info.original_sample_rate;
+            if output_sample_rate != file_rate {
+                log_warn!(
+                    "[AUDIO] engine_sample_rate_hz={} decoded_file_sample_rate_hz={} — decoder resampling active",
+                    output_sample_rate,
+                    file_rate
+                );
+            } else {
+                log_info!(
+                    "[AUDIO] engine_sample_rate_hz matches decoded_file_sample_rate_hz ({} Hz); decoder resampling off",
+                    file_rate
+                );
+            }
 
-    DecoderThread::spawn_from_probe_result(probe_result, output_sample_rate, output_channels, None)
-        .map_err(|error| format!("Failed to decode {}: {}", path.display(), error))
+            let (source, thread) = DecoderThread::spawn_from_probe_result(
+                probe_result,
+                output_sample_rate,
+                output_channels,
+                None,
+            )
+            .map_err(|error| format!("Failed to decode {}: {}", path.display(), error))?;
+            Ok((source, DecoderHandle::Symphonia(thread)))
+        }
+    }
 }
 
 // ============================================================================
@@ -375,76 +408,141 @@ pub fn audio_prepare_engine(preferred_sample_rate: Option<u32>) -> Result<(), St
 
 /// Play an audio file.
 pub fn audio_play(path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
-    let probe_result = probe_file(path.as_path())
-        .map_err(|error| format!("Failed to probe {}: {}", path.display(), error))?;
-    ensure_audio_engine(resolve_track_playback_output_sample_rate(Some(
-        probe_result.source_info.original_sample_rate,
-    ))?)?;
-    let (output_sample_rate, output_channels) =
-        with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
-    let file_rate = probe_result.source_info.original_sample_rate;
-    if output_sample_rate != file_rate {
-        log_warn!(
-            "[AUDIO] engine_sample_rate_hz={} decoded_file_sample_rate_hz={} — decoder resampling active",
-            output_sample_rate,
-            file_rate
-        );
-    } else {
-        log_info!(
-            "[AUDIO] engine_sample_rate_hz matches decoded_file_sample_rate_hz ({} Hz); decoder resampling off",
-            file_rate
-        );
+    let path = PathBuf::from(&path);
+    match detect_file_type(&path) {
+        crate::audio::decoder_handle::FileType::Dsd => {
+            ensure_audio_engine(resolve_requested_output_sample_rate(None)?)?;
+            let (output_sample_rate, output_channels) =
+                with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
+            let (source, thread) = DsdDecoderThread::spawn(
+                path,
+                DsdOutputMode::PcmDecimation,
+                output_sample_rate,
+                FilterQuality::Normal,
+                output_channels,
+            )
+            .map_err(|e| format!("Failed to decode DSD: {}", e))?;
+            with_audio_engine(|handle| handle.play_prepared(source, DecoderHandle::Dsd(thread)))
+        }
+        crate::audio::decoder_handle::FileType::WavPack => {
+            ensure_audio_engine(resolve_requested_output_sample_rate(None)?)?;
+            let (output_sample_rate, output_channels) =
+                with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
+            let (source, handle) = WavpackDecoderThread::spawn(
+                path,
+                output_sample_rate,
+                output_channels,
+            )
+            .map_err(|e| format!("Failed to decode WavPack: {}", e))?;
+            with_audio_engine(|engine| engine.play_prepared(source, handle))
+        }
+        crate::audio::decoder_handle::FileType::Standard => {
+            let probe_result = probe_file(path.as_path())
+                .map_err(|error| format!("Failed to probe {}: {}", path.display(), error))?;
+            ensure_audio_engine(resolve_track_playback_output_sample_rate(Some(
+                probe_result.source_info.original_sample_rate,
+            ))?)?;
+            let (output_sample_rate, output_channels) =
+                with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
+            let file_rate = probe_result.source_info.original_sample_rate;
+            if output_sample_rate != file_rate {
+                log_warn!(
+                    "[AUDIO] engine_sample_rate_hz={} decoded_file_sample_rate_hz={} — decoder resampling active",
+                    output_sample_rate,
+                    file_rate
+                );
+            } else {
+                log_info!(
+                    "[AUDIO] engine_sample_rate_hz matches decoded_file_sample_rate_hz ({} Hz); decoder resampling off",
+                    file_rate
+                );
+            }
+            let (source, decoder_thread) = DecoderThread::spawn_from_probe_result(
+                probe_result,
+                output_sample_rate,
+                output_channels,
+                None,
+            )
+            .map_err(|error| format!("Failed to decode {}: {}", path.display(), error))?;
+            with_audio_engine(|handle| {
+                handle.play_prepared(source, DecoderHandle::Symphonia(decoder_thread))
+            })
+        }
     }
-    let (source, decoder_thread) = DecoderThread::spawn_from_probe_result(
-        probe_result,
-        output_sample_rate,
-        output_channels,
-        None,
-    )
-    .map_err(|error| format!("Failed to decode {}: {}", path.display(), error))?;
-    with_audio_engine(|handle| handle.play_prepared(source, decoder_thread))
 }
 
 /// Queue the next track for gapless playback.
 pub fn audio_queue_next(path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
     if !audio_is_initialized() {
-        let probe_result = probe_file(path.as_path())
-            .map_err(|error| format!("Failed to probe {}: {}", path.display(), error))?;
-        ensure_audio_engine(resolve_track_playback_output_sample_rate(Some(
-            probe_result.source_info.original_sample_rate,
-        ))?)?;
-        let (output_sample_rate, output_channels) =
-            with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
-        let file_rate = probe_result.source_info.original_sample_rate;
-        if output_sample_rate != file_rate {
-            log_warn!(
-                "[AUDIO] engine_sample_rate_hz={} decoded_file_sample_rate_hz={} — decoder resampling active",
-                output_sample_rate,
-                file_rate
-            );
-        } else {
-            log_info!(
-                "[AUDIO] engine_sample_rate_hz matches decoded_file_sample_rate_hz ({} Hz); decoder resampling off",
-                file_rate
-            );
+        match detect_file_type(&path) {
+            crate::audio::decoder_handle::FileType::Dsd => {
+                ensure_audio_engine(resolve_requested_output_sample_rate(None)?)?;
+                let (output_sample_rate, output_channels) =
+                    with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
+                let (source, thread) = DsdDecoderThread::spawn(
+                    path,
+                    DsdOutputMode::PcmDecimation,
+                    output_sample_rate,
+                    FilterQuality::Normal,
+                    output_channels,
+                )
+                .map_err(|e| format!("Failed to decode DSD: {}", e))?;
+                return with_audio_engine(|handle| {
+                    handle.queue_next_prepared(source, DecoderHandle::Dsd(thread))
+                });
+            }
+            crate::audio::decoder_handle::FileType::WavPack => {
+                ensure_audio_engine(resolve_requested_output_sample_rate(None)?)?;
+                let (output_sample_rate, output_channels) =
+                    with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
+                let (source, wh) = WavpackDecoderThread::spawn(
+                    path,
+                    output_sample_rate,
+                    output_channels,
+                )
+                .map_err(|e| format!("Failed to decode WavPack: {}", e))?;
+                return with_audio_engine(|engine| engine.queue_next_prepared(source, wh));
+            }
+            crate::audio::decoder_handle::FileType::Standard => {
+                let probe_result = probe_file(path.as_path())
+                    .map_err(|error| format!("Failed to probe {}: {}", path.display(), error))?;
+                ensure_audio_engine(resolve_track_playback_output_sample_rate(Some(
+                    probe_result.source_info.original_sample_rate,
+                ))?)?;
+                let (output_sample_rate, output_channels) =
+                    with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
+                let file_rate = probe_result.source_info.original_sample_rate;
+                if output_sample_rate != file_rate {
+                    log_warn!(
+                        "[AUDIO] engine_sample_rate_hz={} decoded_file_sample_rate_hz={} — decoder resampling active",
+                        output_sample_rate,
+                        file_rate
+                    );
+                } else {
+                    log_info!(
+                        "[AUDIO] engine_sample_rate_hz matches decoded_file_sample_rate_hz ({} Hz); decoder resampling off",
+                        file_rate
+                    );
+                }
+                let (source, decoder_thread) = DecoderThread::spawn_from_probe_result(
+                    probe_result,
+                    output_sample_rate,
+                    output_channels,
+                    None,
+                )
+                .map_err(|error| format!("Failed to decode {}: {}", path.display(), error))?;
+                return with_audio_engine(|handle| {
+                    handle.queue_next_prepared(source, DecoderHandle::Symphonia(decoder_thread))
+                });
+            }
         }
-        let (source, decoder_thread) = DecoderThread::spawn_from_probe_result(
-            probe_result,
-            output_sample_rate,
-            output_channels,
-            None,
-        )
-        .map_err(|error| format!("Failed to decode {}: {}", path.display(), error))?;
-        return with_audio_engine(|handle| handle.queue_next_prepared(source, decoder_thread));
     }
 
     let (output_sample_rate, output_channels) =
         with_audio_engine(|handle| Ok((handle.sample_rate(), handle.channels())))?;
-    let (source, decoder_thread) =
-        prepare_decoder_source(&path, output_sample_rate, output_channels)?;
-    with_audio_engine(|handle| handle.queue_next_prepared(source, decoder_thread))
+    let (source, handle) = prepare_decoder_source(&path, output_sample_rate, output_channels)?;
+    with_audio_engine(|engine| engine.queue_next_prepared(source, handle))
 }
 
 /// Pause playback.
