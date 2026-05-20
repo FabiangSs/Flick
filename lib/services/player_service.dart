@@ -1043,6 +1043,17 @@ class PlayerService {
   Uac2AudioFormat? _deriveUac2FormatFromSong(Song? song) {
     if (song == null) return null;
 
+    if (song.isDsd) {
+      final dopRate = Song.dsdToDopRate(song.sampleRate) ?? 176400;
+      final dopBitDepth = (song.sampleRate ?? 0) >= 22579200 ? 32 : 24;
+      return Uac2AudioFormat(
+        sampleRate: dopRate,
+        bitDepth: dopBitDepth,
+        channels: 2,
+        isDop: true,
+      );
+    }
+
     final structuredSampleRate = song.sampleRate;
     final structuredBitDepth = song.bitDepth;
     if (structuredSampleRate != null || structuredBitDepth != null) {
@@ -1085,7 +1096,8 @@ class PlayerService {
 
     return a.sampleRate == b.sampleRate &&
         a.bitDepth == b.bitDepth &&
-        a.channels == b.channels;
+        a.channels == b.channels &&
+        a.isDop == b.isDop;
   }
 
   bool _shouldAttemptHardwareVolume() {

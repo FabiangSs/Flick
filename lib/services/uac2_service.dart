@@ -23,17 +23,20 @@ class Uac2AudioFormat {
   final int sampleRate;
   final int bitDepth;
   final int channels;
+  final bool isDop;
 
   const Uac2AudioFormat({
     required this.sampleRate,
     required this.bitDepth,
     required this.channels,
+    this.isDop = false,
   });
 
   Map<String, dynamic> toJson() => {
     'sampleRate': sampleRate,
     'bitDepth': bitDepth,
     'channels': channels,
+    'isDop': isDop,
   };
 
   factory Uac2AudioFormat.fromJson(Map<String, dynamic> json) {
@@ -41,6 +44,7 @@ class Uac2AudioFormat {
       sampleRate: json['sampleRate'] as int,
       bitDepth: json['bitDepth'] as int,
       channels: json['channels'] as int,
+      isDop: (json['isDop'] as bool?) ?? false,
     );
   }
 }
