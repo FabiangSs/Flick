@@ -281,6 +281,24 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
     await ref.read(appPreferencesServiceProvider).setWidgetAccentColor(value);
   }
 
+  Future<void> setWidgetFlagshipTheme(String value) async {
+    if (state.widgetFlagshipTheme == value) return;
+    state = state.copyWith(widgetFlagshipTheme: value);
+    await ref.read(appPreferencesServiceProvider).setWidgetFlagshipTheme(value);
+  }
+
+  Future<void> setWidgetFlagshipAccent(String value) async {
+    if (state.widgetFlagshipAccent == value) return;
+    state = state.copyWith(widgetFlagshipAccent: value);
+    await ref.read(appPreferencesServiceProvider).setWidgetFlagshipAccent(value);
+  }
+
+  Future<void> setWidgetFlagshipShowArtist(bool value) async {
+    if (state.widgetFlagshipShowArtist == value) return;
+    state = state.copyWith(widgetFlagshipShowArtist: value);
+    await ref.read(appPreferencesServiceProvider).setWidgetFlagshipShowArtist(value);
+  }
+
   Future<void> setLyricsMatchAudioFilename(bool value) async {
     if (state.lyricsMatchAudioFilename == value) return;
     state = state.copyWith(lyricsMatchAudioFilename: value);
