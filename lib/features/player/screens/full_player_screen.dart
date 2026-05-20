@@ -14,6 +14,7 @@ import 'package:flick/features/albums/screens/albums_screen.dart';
 import 'package:flick/features/artists/screens/artists_screen.dart';
 import 'package:flick/features/player/widgets/ambient_background.dart';
 import 'package:flick/features/player/widgets/share/share_bottom_sheet.dart';
+import 'package:flick/features/songs/screens/metadata_editor_screen.dart';
 import 'package:flick/features/songs/widgets/album_art_picker_bottom_sheet.dart';
 import 'package:flick/models/album_color_mode.dart';
 import 'package:flick/models/player_screen_mode.dart';
@@ -24,6 +25,7 @@ import 'package:flick/services/external_playback_service.dart';
 import 'package:flick/services/favorites_service.dart';
 import 'package:flick/services/lyrics_service.dart';
 import 'package:flick/providers/rating_provider.dart';
+import 'package:flick/providers/songs_provider.dart';
 import 'package:flick/features/player/widgets/rating_button.dart';
 import 'package:flick/services/player_screen_mode_preference_service.dart';
 import 'package:flick/providers/album_color_provider.dart';
@@ -1184,6 +1186,26 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
                   );
                 },
               ),
+              if (song.filePath != null &&
+                  song.startOffsetMs == null &&
+                  !song.isExternal)
+                _buildSongActionTile(
+                  context: sheetContext,
+                  icon: LucideIcons.pencil,
+                  label: 'Edit Metadata',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => MetadataEditorScreen(song: song),
+                      ),
+                    ).then((saved) {
+                      if (saved == true) {
+                        ref.invalidate(songsProvider);
+                      }
+                    });
+                  },
+                ),
               _buildSongActionTile(
                 context: sheetContext,
                 icon: LucideIcons.info,
@@ -1392,6 +1414,16 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen>
             ),
             if (song.resolution != null)
               _buildMetadataRow(sheetContext, 'Resolution', song.resolution!),
+            if (song.albumArtist != null)
+              _buildMetadataRow(sheetContext, 'Album Artist', song.albumArtist!),
+            if (song.genre != null)
+              _buildMetadataRow(sheetContext, 'Genre', song.genre!),
+            if (song.year != null)
+              _buildMetadataRow(sheetContext, 'Year', song.year!.toString()),
+            if (song.trackNumber != null)
+              _buildMetadataRow(sheetContext, 'Track', song.trackNumber!.toString()),
+            if (song.discNumber != null)
+              _buildMetadataRow(sheetContext, 'Disc', song.discNumber!.toString()),
             if (song.filePath != null)
               _buildMetadataRow(sheetContext, 'File Path', song.filePath!),
           ],
