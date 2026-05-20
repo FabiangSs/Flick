@@ -62,7 +62,7 @@ Each strategy is selected based on device capabilities and current playback requ
 
 The current roadmap includes:
 
-- **DSD/DSF support**: Full engine-level native DSD/DSF decoding and playback (in progress)
+- **DSD/DSF/DFF/WavPack DSD scanning**: Metadata extraction and artwork reading for DSF, DFF, and WavPack DSD files (complete). Engine-level native DSD decoding and playback (in progress).
 - MQA support
 - Poweramp-style EQ filters, including low-pass
 - Themes and broader UI customization options
@@ -117,7 +117,7 @@ Located in `rust/src/audio`, this is the heart of the application. It bypasses s
   - **Android Managed**: Standard audio playback through Oboe/AAudio or the Android mixer
   - **DAP Internal High-Res**: High-resolution audio through the device's internal DAC using Oboe/AAudio in exclusive mode
 
-- **Decoder (`decoder.rs`)**: Uses `symphonia` to read various audio formats (MP3, FLAC, WAV, OGG, M4A, ALAC, AIFF) and decode them into raw sound waves (PCM).
+- **Decoder (`decoder.rs`)**: Uses `symphonia` to read various audio formats (MP3, FLAC, WAV, OGG, M4A, ALAC, AIFF) and decode them into raw sound waves (PCM). DSD decoding planned.
 - **ALAC Converter (`alac_converter.rs`)**: Lossless real-time conversion of ALAC/M4A/AIFF files to WAV/PCM, preserving original bit depth (16/24/32-bit). Session-based streaming conversion for memory efficiency.
 - **Resampler (`resampler.rs`)**: Uses `rubato` to change the audio quality on-the-fly. If a song is 44.1kHz but your speakers are 48kHz, this module smooths out the difference without losing quality.
 - **Crossfader (`crossfader.rs`)**: Handles the smooth blending between songs, so there is no silence when one track ends and the next begins.
@@ -212,8 +212,9 @@ Flick uses a two-tier scanning architecture:
 - Deletion detection queries `MediaStore` for missing files
 
 **Tier 2 — Rust scanner** (legacy, used for direct filesystem access):
-- Located in `rust/src/api/scanner.rs` and utilizing `lofty` and `rayon` for parallel processing
+- Located in `rust/src/api/scanner.rs` and utilizing `lofty`, `dsf-meta`, `dff-meta`, and `rayon` for parallel processing
 - Recursively walks user-defined folders, extracting metadata from ID3 tags, Vorbis comments, covers
+- Supports standard formats (MP3, FLAC, WAV, OGG, Opus, M4A, ALAC, AIFF, WavPack) and DSD formats (DSF, DFF, WavPack DSD)
 - Used as fallback when `MediaStore` querying is unavailable
 
 The combined approach delivered a **~34× speedup** (from 11–12s to 328ms for a 60GB / 1,287-track library).

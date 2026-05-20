@@ -38,7 +38,7 @@
 ### Library Management
 - MediaStore-based scanning with differential database sync (~34x faster than filesystem walk)
 - Background metadata extraction and MediaStore change observer for live updates
-- Metadata extraction (ID3 tags, Vorbis comments) using `lofty`
+- Metadata extraction (ID3 tags, Vorbis comments) using `lofty` with dedicated DSD parsers (`dsf-meta`, `dff-meta`) for DSF, DFF, and WavPack DSD files
 - Fast library queries via Isar database
 - Browse by songs, albums, artists, folders, playlists, favorites, and recently played
 - **Album Art Import**: Search and import album art from MusicBrainz/Cover Art Archive, iTunes, and Deezer
@@ -124,7 +124,8 @@ When a song is playing in Locker and you want to switch to Flick's advanced audi
 
 ## Future Features
 
-- **DSD/DSF support** (engine integration in progress)
+- **DSD scanning**: DSF, DFF, and WavPack DSD (.wv) metadata scanning and artwork extraction (complete)
+- **DSD/DSF playback**: engine-level native DSD decoding and playback (in progress)
 - MQA support
 - Themes and broader UI customization options
 - ~~Album art improvements~~
@@ -166,7 +167,10 @@ When a song is playing in Locker and you want to switch to Flick's advanced audi
 |-------|---------|
 | `symphonia` | Audio decoding (MP3, FLAC, WAV, OGG, M4A/ALAC, AIFF) |
 | `rusb` | USB device access |
-| `lofty` | Audio metadata parsing |
+| `lofty` | Audio metadata parsing (MP3, FLAC, WAV, OGG, M4A/ALAC, AIFF, WavPack) |
+| `dsf-meta` | DSF file metadata reading |
+| `dff-meta` | DFF/DSDIFF file metadata reading |
+| `id3` | ID3 tag access for DSD formats |
 | `rayon` | Parallel processing |
 | `ringbuf` | Lock-free ring buffer |
 | `tracing` | Logging and diagnostics |
