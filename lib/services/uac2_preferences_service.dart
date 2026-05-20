@@ -7,6 +7,10 @@ enum Uac2FormatPreference { highestQuality, compatibility, custom }
 
 enum AudioEnginePreference { exoPlayer, rustOboe, isochronousUsb }
 
+enum DsdFilterQuality { fast, normal, high }
+
+enum DsdOutputMode { auto, forcePcm, forceDop }
+
 class Uac2PreferencesService {
   static final ValueNotifier<bool> developerModeNotifier = ValueNotifier(false);
   static final ValueNotifier<bool> killIsochronousUsbOnQuitNotifier = ValueNotifier(true);
@@ -23,6 +27,8 @@ class Uac2PreferencesService {
   static const _keyUsbSoftwareVolume = 'uac2_usb_software_volume';
   static const _keyKillIsochronousUsbOnQuit = 'uac2_kill_isochronous_usb_on_quit';
   static const _keyGaplessPlaybackEnabled = 'gapless_playback_enabled';
+  static const _keyDsdFilterQuality = 'dsd_filter_quality';
+  static const _keyDsdOutputMode = 'dsd_output_mode';
 
   static bool get isDeveloperModeEnabledSync => developerModeNotifier.value;
   static bool get isKillIsochronousUsbOnQuitSync => killIsochronousUsbOnQuitNotifier.value;
@@ -335,6 +341,54 @@ class Uac2PreferencesService {
     }
   }
 
+  Future<void> setDsdFilterQuality(DsdFilterQuality quality) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyDsdFilterQuality, quality.name);
+    } catch (e) {
+      debugPrint('Failed to save DSD filter quality: $e');
+    }
+  }
+
+  Future<DsdFilterQuality> getDsdFilterQuality() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getString(_keyDsdFilterQuality);
+      if (value == null) return DsdFilterQuality.normal;
+      return DsdFilterQuality.values.firstWhere(
+        (e) => e.name == value,
+        orElse: () => DsdFilterQuality.normal,
+      );
+    } catch (e) {
+      debugPrint('Failed to load DSD filter quality: $e');
+      return DsdFilterQuality.normal;
+    }
+  }
+
+  Future<void> setDsdOutputMode(DsdOutputMode mode) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyDsdOutputMode, mode.name);
+    } catch (e) {
+      debugPrint('Failed to save DSD output mode: $e');
+    }
+  }
+
+  Future<DsdOutputMode> getDsdOutputMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getString(_keyDsdOutputMode);
+      if (value == null) return DsdOutputMode.auto;
+      return DsdOutputMode.values.firstWhere(
+        (e) => e.name == value,
+        orElse: () => DsdOutputMode.auto,
+      );
+    } catch (e) {
+      debugPrint('Failed to load DSD output mode: $e');
+      return DsdOutputMode.auto;
+    }
+  }
+
   Future<void> clearAllPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -351,6 +405,8 @@ class Uac2PreferencesService {
       await prefs.remove(_keyUsbSoftwareVolume);
     await prefs.remove(_keyKillIsochronousUsbOnQuit);
     await prefs.remove(_keyGaplessPlaybackEnabled);
+    await prefs.remove(_keyDsdFilterQuality);
+    await prefs.remove(_keyDsdOutputMode);
     developerModeNotifier.value = false;
       killIsochronousUsbOnQuitNotifier.value = true;
     } catch (e) {
