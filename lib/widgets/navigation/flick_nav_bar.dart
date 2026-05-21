@@ -173,14 +173,21 @@ class _OverflowNavItem extends StatelessWidget {
             ),
             SizedBox(height: spacing),
             if (config.showLabels)
-              Text(
-                'More',
-                style: TextStyle(
-                  fontFamily: 'ProductSans',
-                  fontSize: fontSize,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: color,
-                  letterSpacing: 0.4,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'More',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'ProductSans',
+                      fontSize: fontSize,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                      color: color,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -250,13 +257,17 @@ class _OverflowNavItem extends StatelessWidget {
                             children: [
                               Icon(button.icon, size: 20, color: AppColors.textSecondary),
                               const SizedBox(width: 12),
-                              Text(
-                                button.label,
-                                style: const TextStyle(
-                                  fontFamily: 'ProductSans',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textPrimary,
+                              Flexible(
+                                child: Text(
+                                  button.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontFamily: 'ProductSans',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -411,16 +422,23 @@ class _FlickNavItemState extends State<_FlickNavItem>
                   ),
                   SizedBox(height: spacing),
                   if (widget.config.showLabels)
-                    Text(
-                      widget.button.label,
-                      style: TextStyle(
-                        fontFamily: 'ProductSans',
-                        fontSize: fontSize,
-                        fontWeight: widget.isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: lerpColor,
-                        letterSpacing: 0.4,
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.button.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'ProductSans',
+                            fontSize: fontSize,
+                            fontWeight: widget.isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: lerpColor,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
                       ),
                     ),
                 ],
