@@ -77,6 +77,14 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
     await ref.read(appPreferencesServiceProvider).setShowQuickAccess(value);
   }
 
+  Future<void> setShowEngineSelector(bool value) async {
+    if (state.showEngineSelector == value) return;
+    state = state.copyWith(showEngineSelector: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setShowEngineSelector(value);
+  }
+
   Future<void> setCrossfadeEnabled(bool value) async {
     if (state.crossfadeEnabled == value) return;
     state = state.copyWith(crossfadeEnabled: value);
