@@ -43,17 +43,18 @@ impl DopPacker {
         let bytes_per_channel = dsd_bytes.len() / self.channels.max(1);
         let num_frames = bytes_per_channel / self.dsd_bytes_per_ch.max(1);
 
-        for _ in 0..num_frames {
+        for frame_index in 0..num_frames {
             for ch in 0..self.channels {
                 let ch_base = channel_offsets
                     .get(ch)
                     .copied()
                     .unwrap_or(ch * bytes_per_channel);
+                let frame_byte_offset = ch_base + frame_index * self.dsd_bytes_per_ch;
 
                 let mut sample: u32 = (self.marker_state as u32) << dsd_data_bits;
 
                 for byte_idx in 0..self.dsd_bytes_per_ch {
-                    let read_pos = ch_base + byte_idx;
+                    let read_pos = frame_byte_offset + byte_idx;
                     if read_pos < dsd_bytes.len() {
                         let shift = dsd_data_bits - 8 * (byte_idx + 1);
                         sample |= (dsd_bytes[read_pos] as u32) << shift;
@@ -62,7 +63,6 @@ impl DopPacker {
 
                 output.push(f32::from_bits(sample));
             }
-
             self.advance_marker();
         }
     }
