@@ -172,19 +172,23 @@ fn score_dsd_native(device: &DeviceCaps, track: &TrackInfo) -> Option<u8> {
 }
 
 fn score_dsd_dop(device: &DeviceCaps, track: &TrackInfo) -> Option<u8> {
-    if track.is_dsd && device.supports_dop && device.direct_usb_available && device.direct_usb_verified {
-        if let Some(dsd_rate) = track.dsd_rate {
-            let carrier = crate::audio::dsd_engine::dsd::DsdRate::from_sample_rate(dsd_rate)
-                .map(|r| r.dop_carrier_rate())
-                .unwrap_or(0);
-            if carrier > 0 && device.max_dsd_carrier_rate >= carrier {
-                return Some(90);
-            }
-        }
-        None
-    } else {
-        None
+    if !track.is_dsd || !device.supports_dop {
+        return None;
     }
+    let usb_available = device.direct_usb_available && device.direct_usb_verified;
+    let dap_available = device.confirmed_dap_native || device.supports_native_dsd;
+    if !usb_available && !dap_available {
+        return None;
+    }
+    if let Some(dsd_rate) = track.dsd_rate {
+        let carrier = crate::audio::dsd_engine::dsd::DsdRate::from_sample_rate(dsd_rate)
+            .map(|r| r.dop_carrier_rate())
+            .unwrap_or(0);
+        if carrier > 0 && device.max_dsd_carrier_rate >= carrier {
+            return Some(90);
+        }
+    }
+    None
 }
 
 pub static DEFAULT_CANDIDATES: &[BackendCandidate] = &[
