@@ -72,6 +72,8 @@ pub enum AudioCommand {
     },
     /// Switch pipeline mode at runtime (e.g. when Bit-perfect (DAP Internal) is toggled).
     SetPipelineMode { passthrough: bool },
+    /// Override pipeline to Dop for DoP DSD playback, or restore base mode.
+    SetDopOverride { is_dop: bool },
     /// Trigger crossfade to next track immediately
     CrossfadeToNext,
     /// Skip to the next track (with crossfade if enabled)
