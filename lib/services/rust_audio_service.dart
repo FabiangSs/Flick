@@ -235,9 +235,10 @@ class RustAudioService {
   void _syncDsdOutputMode() {
     final mode = Uac2PreferencesService.dsdOutputModeSync;
     final rustMode = switch (mode) {
+      DsdOutputMode.auto => 3,
+      DsdOutputMode.forcePcm => 0,
       DsdOutputMode.forceDop => 1,
       DsdOutputMode.native => 2,
-      _ => 0,
     };
     rust_audio.audioSetDsdOutputMode(mode: rustMode);
   }

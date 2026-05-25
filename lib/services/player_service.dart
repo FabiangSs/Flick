@@ -760,7 +760,8 @@ class PlayerService {
       bitPerfectProcessingLockedNotifier.value;
   bool get isCurrentTrackDoP =>
       (Uac2PreferencesService.dsdOutputModeSync == DsdOutputMode.forceDop ||
-          Uac2PreferencesService.dsdOutputModeSync == DsdOutputMode.native) &&
+          Uac2PreferencesService.dsdOutputModeSync == DsdOutputMode.native ||
+          Uac2PreferencesService.dsdOutputModeSync == DsdOutputMode.auto) &&
       currentSongNotifier.value?.isDsd == true;
 
   void _updateBitPerfectProcessingLocked() {
@@ -1054,7 +1055,7 @@ class PlayerService {
 
     if (song.isDsd) {
       final dsdMode = Uac2PreferencesService.dsdOutputModeSync;
-      if (dsdMode == DsdOutputMode.native) {
+      if (dsdMode == DsdOutputMode.native || dsdMode == DsdOutputMode.auto) {
         final rawRate = song.sampleRate ?? 2822400;
         return Uac2AudioFormat(
           sampleRate: rawRate,
@@ -1064,8 +1065,7 @@ class PlayerService {
           isNativeDsd: true,
         );
       }
-      final useDop = dsdMode == DsdOutputMode.forceDop;
-      if (useDop) {
+      if (dsdMode == DsdOutputMode.forceDop) {
         final dopRate = Song.dsdToDopRate(song.sampleRate) ?? 176400;
         final dopBitDepth = (song.sampleRate ?? 0) >= 22579200 ? 32 : 24;
         return Uac2AudioFormat(
@@ -1384,6 +1384,8 @@ class PlayerService {
         ? 'Android shared'
         : switch (outputStrategy) {
             'dap_native' => 'DAP native',
+            'dsd_native' => 'DSD native',
+            'dsd_dop' => 'DSD DoP',
             'mixer_bit_perfect' => 'Mixer bit-perfect',
             'mixer_matched' => 'Mixer matched',
             'usb_direct' => 'USB direct',
@@ -1396,6 +1398,12 @@ class PlayerService {
             'usb_direct' when passthroughAllowed =>
               'Rust engine via libusb direct USB (verified)',
             'usb_direct' => 'Rust engine via libusb direct USB',
+            'dsd_native' when passthroughAllowed =>
+              'Rust engine via ENCODING_DSD AudioTrack (native DSD)',
+            'dsd_native' => 'Rust engine via ENCODING_DSD AudioTrack',
+            'dsd_dop' when passthroughAllowed =>
+              'Rust engine via DoP over PCM carrier (verified)',
+            'dsd_dop' => 'Rust engine via DoP over PCM carrier',
             'dap_native' when passthroughAllowed =>
               'Rust engine via native DAP HAL path (verified)',
             'dap_native' => 'Rust engine via native DAP HAL path',
@@ -1415,6 +1423,10 @@ class PlayerService {
         : switch (outputStrategy) {
             'usb_direct' when passthroughAllowed => 'Verified USB direct',
             'usb_direct' => 'USB direct',
+            'dsd_native' when passthroughAllowed => 'Verified DSD native',
+            'dsd_native' => 'DSD native',
+            'dsd_dop' when passthroughAllowed => 'Verified DSD DoP',
+            'dsd_dop' => 'DSD DoP',
             'dap_native' when passthroughAllowed => 'Verified DAP native',
             'dap_native' => 'DAP native',
             'mixer_bit_perfect' when passthroughAllowed => 'Mixer bit-perfect',
