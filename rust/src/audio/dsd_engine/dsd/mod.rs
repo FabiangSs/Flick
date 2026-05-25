@@ -99,7 +99,7 @@ pub struct DsdDecimationPipeline {
 
 impl DsdDecimationPipeline {
     const CIC_ORDER: usize = 3;
-    const FIXED_FIR_TAPS: usize = 512;
+    const FIXED_FIR_TAPS: usize = 256;
     const MAX_CIC_DECIMATION: usize = 4;
     const AUDIO_BAND_HZ: u32 = 20_000;
 
@@ -164,7 +164,7 @@ impl DsdDecimationPipeline {
             coefficients::generate_sinc_filter(
                 fir_taps,
                 cutoff as f64 / intermediate_rate as f64,
-                coefficients::WindowFunction::Kaiser { beta: 12.0 },
+                coefficients::WindowFunction::Kaiser { beta: 8.0 },
             )
         })
     }
