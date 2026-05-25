@@ -17,7 +17,7 @@ use crate::audio::fx::SpatialFx;
 use crate::audio::source::{AudioSource, SourceProvider};
 use crate::audio::strategy::OutputStrategy;
 #[cfg(target_os = "android")]
-use crate::audio::strategy::{select_strategy, DeviceCaps, TrackInfo};
+use crate::audio::strategy::{select_strategy_excluded, DeviceCaps, TrackInfo};
 #[cfg(target_os = "android")]
 use crate::audio::verifier::OutputVerification;
 #[cfg(all(feature = "uac2", target_os = "android"))]
@@ -57,6 +57,10 @@ pub struct AudioOutputRuntimeState {
     pub verification_reason: Option<String>,
     pub direct_usb_active: bool,
     pub direct_usb_verified: bool,
+    pub dsd_source_rate: Option<u32>,
+    pub dsd_effective_mode: Option<String>,
+    pub dsd_wire_rate: Option<u32>,
+    pub dsd_transport: Option<String>,
 }
 
 /// Pipeline mode: set once at engine creation time, never toggled at runtime.
@@ -541,6 +545,7 @@ pub fn create_audio_engine(
     preferred_sample_rate: Option<u32>,
     _allow_dap_native: bool,
     _dap_bit_perfect_enabled: bool,
+    _excluded_strategies: Vec<OutputStrategy>,
 ) -> Result<AudioEngineHandle, String> {
     // Get the default audio device
     let host = cpal::default_host();
@@ -669,6 +674,10 @@ pub fn create_audio_engine(
             verification_reason: None,
             direct_usb_active: false,
             direct_usb_verified: false,
+            dsd_source_rate: None,
+            dsd_effective_mode: None,
+            dsd_wire_rate: None,
+            dsd_transport: None,
         },
         decoders,
         shutdown,
@@ -688,9 +697,30 @@ pub fn desired_output_signature(preferred_sample_rate: Option<u32>) -> String {
         return signature;
     }
 
+    let dsd_suffix = match crate::api::audio_api::current_dsd_track_rate()
+        .and_then(crate::audio::dsd_engine::dsd::DsdRate::from_sample_rate)
+    {
+        Some(rate) => {
+            let mode = crate::api::audio_api::effective_dsd_output_mode(
+                crate::api::audio_api::current_dsd_output_mode(),
+            );
+            match mode {
+                crate::audio::dsd_engine::dsd::DsdOutputMode::Native => {
+                    format!(":dsd-native:{}", rate.byte_rate())
+                }
+                crate::audio::dsd_engine::dsd::DsdOutputMode::Dop => {
+                    format!(":dsd-dop:{}", rate.dop_carrier_rate())
+                }
+                _ => String::new(),
+            }
+        }
+        None => String::new(),
+    };
+
     format!(
-        "android-shared:requested:{}",
-        preferred_sample_rate.unwrap_or(48_000)
+        "android-shared:requested:{}{}",
+        preferred_sample_rate.unwrap_or(48_000),
+        dsd_suffix,
     )
 }
 
@@ -748,7 +778,7 @@ fn android_output_signature_for_strategy(
             format!("android-shared:dsd-native:{}", requested_sample_rate)
         }
         OutputStrategy::DsdDoP => {
-            format!("android-uac2:dsd-dop:{}", requested_sample_rate)
+            format!("android-shared:dsd-dop:{}", requested_sample_rate)
         }
     }
 }
@@ -760,6 +790,34 @@ fn build_output_runtime_state(
     direct_usb_active: bool,
     direct_usb_verified: bool,
 ) -> AudioOutputRuntimeState {
+    let dsd_source_rate = crate::api::audio_api::current_dsd_track_rate();
+    let dsd_effective_mode = dsd_source_rate.map(|_| {
+        let mode = crate::api::audio_api::effective_dsd_output_mode(
+            crate::api::audio_api::current_dsd_output_mode(),
+        );
+        match mode {
+            crate::audio::dsd_engine::dsd::DsdOutputMode::PcmDecimation => "pcm".to_string(),
+            crate::audio::dsd_engine::dsd::DsdOutputMode::Dop => "dop".to_string(),
+            crate::audio::dsd_engine::dsd::DsdOutputMode::Native => "native".to_string(),
+            crate::audio::dsd_engine::dsd::DsdOutputMode::Auto => "auto".to_string(),
+        }
+    });
+    let (dsd_wire_rate, dsd_transport) = if dsd_source_rate.is_some() {
+        let wire_rate = verification.actual_rate;
+        let transport = match strategy {
+            OutputStrategy::DsdNative => {
+                if direct_usb_active { "uac2-type3" } else { "dap-native-encoding" }
+            }
+            OutputStrategy::DsdDoP => {
+                if direct_usb_active { "uac2-dop" } else { "dap-native" }
+            }
+            OutputStrategy::UsbDirect => "uac2-pcm",
+            _ => "dap-native",
+        };
+        (Some(wire_rate), Some(transport.to_string()))
+    } else {
+        (None, None)
+    };
     AudioOutputRuntimeState {
         strategy: verification
             .resolved_strategy(strategy)
@@ -772,6 +830,10 @@ fn build_output_runtime_state(
         verification_reason: verification.reason,
         direct_usb_active,
         direct_usb_verified,
+        dsd_source_rate,
+        dsd_effective_mode,
+        dsd_wire_rate,
+        dsd_transport,
     }
 }
 
@@ -786,6 +848,7 @@ pub fn create_audio_engine(
     preferred_sample_rate: Option<u32>,
     allow_dap_native: bool,
     dap_bit_perfect_enabled: bool,
+    excluded_strategies: Vec<OutputStrategy>,
 ) -> Result<AudioEngineHandle, String> {
     let device_profile = current_device_profile();
 
@@ -804,7 +867,7 @@ pub fn create_audio_engine(
     let dap_force_dsp = !dap_bit_perfect_enabled
         && device_profile.as_ref().is_some_and(|p| p.is_dap())
         && !will_attempt_usb;
-    let requested_sample_rate = if dap_force_dsp {
+    let mut requested_sample_rate = if dap_force_dsp {
         if let Some(rate) = preferred_sample_rate {
             if rate > 48_000 { rate } else { 48_000 }
         } else {
@@ -819,7 +882,14 @@ pub fn create_audio_engine(
         validate_android_direct_request(Some(requested_sample_rate))?;
     }
 
-    let selected_output_device = select_android_output_device(requested_sample_rate).ok();
+    let selected_output_device = select_android_output_device(requested_sample_rate)
+        .or_else(|_| {
+            // DSD Native and DoP bypass the Oboe stream entirely, so if
+            // the byte/carrier rate isn't supported by any PCM device,
+            // try a standard rate just to confirm a wired output exists.
+            select_android_output_device(48_000)
+        })
+        .ok();
     let shared_supports_requested_rate = selected_output_device
         .as_ref()
         .map(|device| android_device_supports_sample_rate(device, requested_sample_rate))
@@ -833,7 +903,9 @@ pub fn create_audio_engine(
             })
         });
 
-    let dsd_rate = crate::audio::dsd_engine::dsd::DsdRate::from_sample_rate(requested_sample_rate);
+    let dsd_rate = crate::api::audio_api::current_dsd_track_rate()
+        .and_then(crate::audio::dsd_engine::dsd::DsdRate::from_sample_rate)
+        .or_else(|| crate::audio::dsd_engine::dsd::DsdRate::from_sample_rate(requested_sample_rate));
     let supports_native_dsd = device_profile
         .as_ref()
         .is_some_and(|p| p.supports_native_dsd);
@@ -846,8 +918,8 @@ pub fn create_audio_engine(
         } else {
             TrackInfo::pcm(requested_sample_rate, ANDROID_DIRECT_CHANNELS)
         };
-        select_strategy(
-            track_info,
+        select_strategy_excluded(
+            &track_info,
             &DeviceCaps {
                 api_level: None,
                 confirmed_dap_native,
@@ -857,8 +929,40 @@ pub fn create_audio_engine(
                 max_dsd_carrier_rate: if supports_native_dsd { 705_600 } else { 0 },
                 ..DeviceCaps::default()
             },
+            &excluded_strategies,
         )
     };
+
+    // Override the sample rate for DSD strategies: the DSD Native
+    // backend needs the byte rate (e.g. 705 600 Hz for DSD128) and
+    // DSD DoP needs the carrier rate (e.g. 352 800 Hz for DSD128).
+    if !will_attempt_usb {
+        match desired_strategy {
+            OutputStrategy::DsdNative => {
+                if let Some(rate) = dsd_rate {
+                    let byte_rate = rate.byte_rate();
+                    log::info!(
+                        "[ENGINE] DSD Native: overriding rate {} -> {} Hz (byte_rate)",
+                        requested_sample_rate,
+                        byte_rate,
+                    );
+                    requested_sample_rate = byte_rate;
+                }
+            }
+            OutputStrategy::DsdDoP => {
+                if let Some(rate) = dsd_rate {
+                    let carrier = rate.dop_carrier_rate();
+                    log::info!(
+                        "[ENGINE] DSD DoP: overriding rate {} -> {} Hz (carrier_rate)",
+                        requested_sample_rate,
+                        carrier,
+                    );
+                    requested_sample_rate = carrier;
+                }
+            }
+            _ => {}
+        }
+    }
 
     #[cfg(feature = "uac2")]
     let channels = {
@@ -954,6 +1058,8 @@ pub fn create_audio_engine(
 
     #[cfg(feature = "uac2")]
     let mut direct_usb_backend = None;
+
+    let mut dsd_native_backend = None;
 
     let mut final_sample_rate = requested_sample_rate;
     let mut output_runtime = build_output_runtime_state(
@@ -1054,11 +1160,58 @@ pub fn create_audio_engine(
         }
     }
 
+    // DSD Native AudioTrack: for DAPs with ENCODING_DSD support, bypass Oboe
+    // entirely and use a dedicated AudioTrack with ENCODING_DSD encoding.
+    #[cfg(target_os = "android")]
+    if desired_strategy == OutputStrategy::DsdNative && direct_usb_backend.is_none() {
+        if supports_native_dsd {
+            match crate::audio::dsd_native_backend::DsdNativeBackend::start(
+                Arc::clone(&callback_data_clone),
+                event_tx_clone.clone(),
+                requested_sample_rate,
+                channels,
+            ) {
+                Ok(backend) => {
+                    log::info!(
+                        "[ENGINE] DSD Native AudioTrack backend created at {} Hz",
+                        requested_sample_rate
+                    );
+                    final_sample_rate = requested_sample_rate;
+                    callback_data.reconfigure_sample_rate(final_sample_rate);
+                    callback_data.set_pipeline_mode(PipelineMode::Dop);
+                    output_runtime = build_output_runtime_state(
+                        OutputStrategy::DsdNative,
+                        OutputVerification::verify(requested_sample_rate, requested_sample_rate, true, true),
+                        false,
+                        false,
+                    );
+                    output_signature = android_output_signature_for_strategy(
+                        OutputStrategy::DsdNative,
+                        requested_sample_rate,
+                    );
+                    dsd_native_backend = Some(backend);
+                }
+                Err(error) => {
+                    log::warn!(
+                        "[ENGINE] DSD Native AudioTrack init failed: {}. Will fall back to DoP/PCM.",
+                        error
+                    );
+                    return Err(format!("DSD_NATIVE_FALLBACK:{}", error));
+                }
+            }
+        } else {
+            log::warn!(
+                "[ENGINE] DSD Native strategy selected but device does not support ENCODING_DSD"
+            );
+            return Err("DSD_NATIVE_FALLBACK:Device does not support ENCODING_DSD".to_string());
+        }
+    }
+
     let mut managed_stream = None;
     #[cfg(feature = "uac2")]
-    let use_managed_fallback = direct_usb_backend.is_none();
+    let use_managed_fallback = direct_usb_backend.is_none() && dsd_native_backend.is_none();
     #[cfg(not(feature = "uac2"))]
-    let use_managed_fallback = true;
+    let use_managed_fallback = dsd_native_backend.is_none();
 
     if use_managed_fallback {
         let desired_shared_strategy = if desired_strategy == OutputStrategy::UsbDirect {
@@ -1089,6 +1242,13 @@ pub fn create_audio_engine(
         } else {
             callback_data.set_pipeline_mode(PipelineMode::Dsp);
         }
+        let is_dsd_dop = dsd_rate.is_some() && matches!(
+            desired_shared_strategy,
+            OutputStrategy::DsdDoP
+        );
+        if is_dsd_dop {
+            callback_data.set_pipeline_mode(PipelineMode::Dop);
+        }
         output_runtime =
             build_output_runtime_state(desired_shared_strategy, verification, false, false);
         output_signature =
@@ -1113,6 +1273,7 @@ pub fn create_audio_engine(
         .spawn(move || {
             #[cfg(feature = "uac2")]
             let mut direct_usb_backend = direct_usb_backend;
+            let mut dsd_native_backend = dsd_native_backend;
             let mut managed_stream = managed_stream;
 
             #[cfg(feature = "uac2")]
@@ -1133,6 +1294,27 @@ pub fn create_audio_engine(
                 }
                 return;
             }
+
+            #[cfg(target_os = "android")]
+            if dsd_native_backend.is_some() {
+                command_processing_loop(
+                    command_rx,
+                    finished_rx,
+                    event_tx,
+                    callback_data_for_thread,
+                    state_clone,
+                    decoders_clone,
+                    final_sample_rate,
+                    shutdown_clone,
+                );
+
+                if let Some(mut backend) = dsd_native_backend.take() {
+                    backend.stop();
+                }
+                return;
+            }
+            #[cfg(not(target_os = "android"))]
+            let _ = dsd_native_backend;
 
             let mut stream = match managed_stream.take() {
                 Some(stream) => stream.stream,
@@ -2051,7 +2233,8 @@ fn spawn_decoder(
     let file_type = detect_file_type(&path);
     match file_type {
         FileType::Dsd => {
-            let output_mode = crate::api::audio_api::current_dsd_output_mode();
+            let requested = crate::api::audio_api::current_dsd_output_mode();
+            let output_mode = crate::api::audio_api::effective_dsd_output_mode(requested);
             let (source, thread) = if let Some(seek) = seek_secs {
                 DsdDecoderThread::spawn_with_seek(
                     path, output_mode, sample_rate, channels, Some(seek),
