@@ -171,8 +171,6 @@ fn dsd_decode_thread(
         DsdChannelLayout::Interleaved => DSD_READ_CHUNK_SIZE,
     };
 
-    let needs_deinterleave = matches!(channel_layout, DsdChannelLayout::Interleaved);
-
     let mut dsd_buf = vec![0u8; read_size];
     let mut output_buf: Vec<f32> = Vec::with_capacity(DSD_READ_CHUNK_SIZE);
 
@@ -193,15 +191,23 @@ fn dsd_decode_thread(
             break;
         }
 
-        let (data, offsets) = if needs_deinterleave {
-            let deint = deinterleave_dsd(&dsd_buf[..bytes_read], source_channels);
-            let bytes_per_ch = deint.len() / source_channels.max(1);
-            let off: Vec<usize> = (0..source_channels).map(|ch| ch * bytes_per_ch).collect();
-            (ChannelData::Owned(deint), off)
-        } else {
-            let bytes_per_ch = bytes_read / source_channels.max(1);
-            let off: Vec<usize> = (0..source_channels).map(|ch| ch * bytes_per_ch).collect();
-            (ChannelData::Borrowed(&dsd_buf[..bytes_read]), off)
+        let (data, offsets) = match &channel_layout {
+            DsdChannelLayout::Interleaved => {
+                let deint = deinterleave_dsd(&dsd_buf[..bytes_read], source_channels);
+                let bytes_per_ch = deint.len() / source_channels.max(1);
+                let off: Vec<usize> = (0..source_channels).map(|ch| ch * bytes_per_ch).collect();
+                (ChannelData::Owned(deint), off)
+            }
+            DsdChannelLayout::SequentialBlocks { block_size } => {
+                let deint = deinterleave_sequential_blocks(
+                    &dsd_buf[..bytes_read],
+                    source_channels,
+                    *block_size,
+                );
+                let bytes_per_ch = deint.len() / source_channels.max(1);
+                let off: Vec<usize> = (0..source_channels).map(|ch| ch * bytes_per_ch).collect();
+                (ChannelData::Owned(deint), off)
+            }
         };
 
         if let Err(e) = output_router.process_dsd_bytes(data.as_slice(), &offsets, &mut output_buf)
@@ -232,6 +238,25 @@ fn deinterleave_dsd(interleaved: &[u8], channels: usize) -> Vec<u8> {
     }
 
     output
+}
+
+fn deinterleave_sequential_blocks(data: &[u8], channels: usize, block_size: usize) -> Vec<u8> {
+    if channels <= 1 {
+        return data.to_vec();
+    }
+    let macro_block = block_size * channels;
+    let num_blocks = data.len() / macro_block;
+    let bytes_per_ch = num_blocks * block_size;
+    let mut out = vec![0u8; bytes_per_ch * channels];
+
+    for ch in 0..channels {
+        for block in 0..num_blocks {
+            let src = block * macro_block + ch * block_size;
+            let dst = ch * bytes_per_ch + block * block_size;
+            out[dst..dst + block_size].copy_from_slice(&data[src..src + block_size]);
+        }
+    }
+    out
 }
 
 fn write_to_ring_buffer(
