@@ -1669,15 +1669,14 @@ fn sharing_label(sharing: SharingMode) -> &'static str {
     }
 }
 
-/// Convert a linear volume slider value (0.0–1.0) to a perceptual gain.
-/// Uses an exponential curve mapping to ≈[-60 dB, 0 dB], which provides
-/// a more natural loudness response where 50 % slider ≈ half perceived volume.
+/// Convert a linear volume slider value (0.0–1.0) to an exponential gain.
+/// 1.0 → 0 dB, 0.0 → -20 dB. The slider position maps linearly to dB.
 #[inline]
 fn volume_to_gain(volume: f32) -> f32 {
     if volume <= 0.0 {
         0.0
     } else {
-        10.0_f32.powf((volume - 1.0) * 3.0)
+        10.0_f32.powf(volume - 1.0)
     }
 }
 
