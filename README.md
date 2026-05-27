@@ -74,6 +74,7 @@
 - **Star Ratings**: 1–5 star ratings on songs with animated overlay and persistent storage
 - **Song Sharing**: Share songs as album art, lyric, minimal, or solid color cards — save to gallery or share via apps
 - **Custom Player Action Buttons**: Configure left and right action button slots (rating, share, lyrics, shuffle, etc.)
+- **Milestone Tracking**: Achievement milestones for songs played (100/500/1000) and listening time (10/50 hours) with congratulatory dialogs
 
 ### Home Screen Widget
 - **Mini Player Widget**: Native Android widget with album art, progress bar, and transport controls
@@ -114,6 +115,11 @@
 - **Manual Updates**: Settings UI allows scanning for and installing updates
 - **Flexible Updates**: Download updates in the background while using the app
 - **Patch Notes**: Release notes fetched from GitHub Releases API
+
+### Support & Donations
+- **Support Flick Screen**: In-app donation screen explaining where contributions go (Play Store fees, audio testing equipment, DSD development)
+- **Ko-fi Integration**: Donate via Ko-fi directly from the app
+- **Pulsing Heart Icon**: Heart button in settings header linking to the support screen
 
 ## Moss Ecosystem
 

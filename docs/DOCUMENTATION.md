@@ -78,7 +78,12 @@ The current roadmap includes:
 
 ### Recently Completed
 
-- **Native DSD Playback**: JNI `AudioTrack` backend with `ENCODING_DSD` for raw DSD bitstream delivery to DACs — no PCM conversion
+- **Milestone Tracking**: Achievement system tracking songs played (100/500/1000) and listening time (10/50 hours). `MilestoneService` with accumulated listen time, milestone dialogs from app shell, and persistent "shown" state per milestone. Welcome card on menu screen with animated dismiss.
+- **Support Flick Screen**: In-app donation screen with animated info tiles explaining how contributions fund Play Store fees, audio testing equipment, and DSD development. Pulsing heart icon in settings header links to support page.
+- **Audio Session Fix**: Rust engine now activates Android `AudioSession` on start — fixes audio focus, prevents ducking, and enables coexistence with notifications.
+- **Volume Slider Refinement**: Gain mapping changed from steep 0-60 dB curve to gentle 0-20 dB linear dB mapping for more precise control.
+- **Orbit Scroll Refactor**: `ValueNotifier` replaces per-item `setState`; cache size limited to prevent unbounded growth.
+- **Full Player Performance**: `SingleChildScrollView` wrapper removed from column layout, eliminating layout jank.
 - **DoP (DSD over PCM)**: DSD64–DSD512 packed into 24/32-bit PCM frames with 0x05/0xFA markers for DoP-capable DACs
 - **DSD Auto Output Mode**: Smart runtime probing (Native → DoP → PCM decimation) based on device capabilities
 - **WavPack DSD Detection**: Automatic `.wv` file routing to DSD or PCM decoder based on WavPack mode flags

@@ -160,6 +160,40 @@ This beta adds eleven headline features:
 - **Dynamic padding**: Header styling updated with dynamic padding fix.
 - **Compatibility notice**: Bit-perfect toggle disabled when isochronous USB engine is not active.
 
+## Post-Release Additions & Fixes (May 2026)
+
+The following was merged after the initial 0.16.0-beta.1 cutoff:
+
+### Milestone Tracking (User Achievements)
+
+- **MilestoneService**: Tracks total songs played and accumulated listen time across sessions. Five tiers: 100 songs, 500 songs, 1,000 songs, 10 hours, 50 hours — each with its own encouraging message and Ko-fi call-to-action.
+- **Milestone dialog**: Displayed from the app shell when a new milestone is achieved. Each milestone is shown only once.
+- **Player tracking**: `_trackMilestones()` adds listen duration per song and checks for milestones; `pendingMilestoneNotifier` triggers the dialog.
+- **Preferences**: `welcomeCardDismissed` key stores whether the welcome card has been permanently dismissed.
+
+### Support Flick (In-App Donation Screen)
+
+- **SupportFlickScreen**: Full-screen page with three animated info tiles explaining that Flick is a solo project, where donations go (Play Store fees, audio testing gear, DSD development), and a pulsing-border Ko-fi button.
+- **Settings header heart button**: Pulsing heart icon in the settings header navigates to the support screen. Uses a repeating ease-in-out animation.
+- **Recap screen credit**: Ko-fi support button and credit line added to the listening recap screen footer.
+
+### Animated Welcome Card
+
+- **Menu screen welcome card**: Gradient-bordered card introducing the app, displayed at the top of the menu screen beneath the greeting. Slide+fade entry animation, dismiss with reverse animation.
+- **Persistent dismissal**: Dismissing the welcome card sets `welcomeCardDismissed` to true, preventing it from reappearing on subsequent launches.
+
+### Audio Engine Fixes
+
+- **Audio session activation**: Rust engine now calls `AudioSession.instance.setActive(true)` on Android to properly request audio focus — prevents ducking and allows playback to coexist with notifications.
+- **Volume slider gain mapping**: Exponential curve replaced with a gentler 0-20 dB linear mapping. Slider position now maps linearly to dB, providing more precise control in the usable range.
+- **Skip WAV conversion for normal engine**: Content URI staging and WAV conversion are now skipped when the standard (non-USB) Android engine is active, reducing unnecessary file I/O.
+
+### UI Performance Fixes
+
+- **Orbit scroll refactor**: `OrbitScroll` now uses `ValueNotifier` instead of `setState` per item, and cache size is limited to prevent unbounded growth during long scrolling sessions.
+- **Card width caching**: Card width computed once per layout and reused; `RepaintBoundary` wrapper removed to reduce compositing layer overhead.
+- **Full player screen**: Removed the `SingleChildScrollView` wrapping the column layout, eliminating layout jank on devices where the content exceeds the viewport.
+
 ## Known Issues
 
 - **DSD volume control**: PCM decimation produces silence when DoP is not available, blocking the volume control fallback path. Hardware volume is used as primary control; digital volume is not available for native DSD streams. See `docs/DSD_VOLUME_CONTROL_STATUS.md` for details.

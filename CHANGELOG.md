@@ -115,6 +115,34 @@
 - Bit-perfect mode default volume set to -40 dB safety level
 - Dynamic padding and header styling fix
 
+### Milestone Tracking
+- Achievement milestones: 100, 500, 1,000 songs played; 10, 50 hours listened
+- `MilestoneService` with play count and accumulated listen time tracking
+- `MilestoneType` enum with title, message, and achievement date
+- `pendingMilestoneNotifier` in `PlayerService` for milestone dialog triggers
+- Milestone dialog displayed from app shell when a new milestone is achieved
+
+### Donation & Support
+- In-app Support Flick screen with animated info tiles (solo dev, where money goes, Ko-fi link)
+- Pulsing heart icon with support button in settings header
+- Ko-fi support button and credit line on listening recap screen
+- External Ko-fi link replaced with in-app screen
+
+### Welcome Card
+- Animated welcome card on menu screen introducing the app and soliciting support
+- Dismiss-to-close with animated transition
+- `welcomeCardDismissed` preference for persistent dismissal
+
+### Audio Engine Fixes
+- Audio session now activated for Rust engine on Android (fixes audio focus/ducking)
+- Volume slider gain mapping refined: 0-20 dB linear mapping replaces steep 0-60 dB curve
+- WAV conversion/staging skipped for normal Android engine (not USB)
+
+### UI Performance
+- Orbit scroll refactored to use `ValueNotifier` with cache size limit
+- Card width cached once and reused; `RepaintBoundary` wrapper removed
+- `SingleChildScrollView` wrapper removed from column in full player screen
+
 ### Gated
 - Native DSD, DoP, and Auto output modes marked experimental — disabled by default
 
