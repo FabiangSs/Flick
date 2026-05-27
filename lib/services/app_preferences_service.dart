@@ -44,6 +44,7 @@ class AppPreferences {
   final bool lyricsMatchAudioFilename;
   final String leftActionButton;
   final String rightActionButton;
+  final bool welcomeCardDismissed;
 
   const AppPreferences({
     this.animationsEnabled = true,
@@ -89,6 +90,7 @@ class AppPreferences {
     this.lyricsMatchAudioFilename = false,
     this.leftActionButton = 'lyrics',
     this.rightActionButton = 'favorites',
+    this.welcomeCardDismissed = false,
   });
 
   AppPreferences copyWith({
@@ -135,6 +137,7 @@ class AppPreferences {
     bool? lyricsMatchAudioFilename,
     String? leftActionButton,
     String? rightActionButton,
+    bool? welcomeCardDismissed,
   }) {
     return AppPreferences(
       animationsEnabled: animationsEnabled ?? this.animationsEnabled,
@@ -194,6 +197,7 @@ class AppPreferences {
           lyricsMatchAudioFilename ?? this.lyricsMatchAudioFilename,
       leftActionButton: leftActionButton ?? this.leftActionButton,
       rightActionButton: rightActionButton ?? this.rightActionButton,
+      welcomeCardDismissed: welcomeCardDismissed ?? this.welcomeCardDismissed,
     );
   }
 }
@@ -242,6 +246,7 @@ class AppPreferencesService {
   static const _lyricsMatchAudioFilenameKey = 'lyrics_match_audio_filename';
   static const _leftActionButtonKey = 'left_action_button';
   static const _rightActionButtonKey = 'right_action_button';
+  static const _welcomeCardDismissedKey = 'welcome_card_dismissed';
 
   Future<AppPreferences> getPreferences() async {
     final prefs = await SharedPreferences.getInstance();
@@ -307,6 +312,7 @@ class AppPreferencesService {
           prefs.getString(_leftActionButtonKey) ?? 'lyrics',
       rightActionButton:
           prefs.getString(_rightActionButtonKey) ?? 'favorites',
+      welcomeCardDismissed: prefs.getBool(_welcomeCardDismissedKey) ?? false,
     );
   }
 
@@ -688,5 +694,15 @@ class AppPreferencesService {
   Future<void> setRightActionButton(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_rightActionButtonKey, value);
+  }
+
+  Future<bool> getWelcomeCardDismissed() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_welcomeCardDismissedKey) ?? false;
+  }
+
+  Future<void> setWelcomeCardDismissed(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_welcomeCardDismissedKey, value);
   }
 }
