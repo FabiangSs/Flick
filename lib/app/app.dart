@@ -26,6 +26,7 @@ import 'package:flick/features/player/widgets/ambient_background.dart';
 import 'package:flick/widgets/navigation/flick_nav_bar.dart';
 import 'package:flick/providers/providers.dart';
 import 'package:flick/features/onboarding/screens/onboarding_screen.dart';
+import 'package:flick/features/onboarding/widgets/tutorial_overlay.dart';
 import 'package:flick/widgets/common/cached_image_widget.dart';
 import 'package:flick/widgets/common/glass_dialog.dart';
 import 'package:flick/models/song.dart';
@@ -267,6 +268,11 @@ class _MainShellState extends ConsumerState<MainShell>
       _maybeOpenExternalPlayer(ref.read(currentSongProvider));
       _refreshLibraryDeletions();
       ref.read(updateCheckProvider.notifier).refreshIfOnline();
+
+      final tutorialState = ref.read(tutorialProvider);
+      if (tutorialState.autoStartPending && !tutorialState.active) {
+        ref.read(tutorialProvider.notifier).start();
+      }
     });
 
     _playerService.playbackDesyncedNotifier.addListener(
@@ -617,6 +623,11 @@ class _MainShellState extends ConsumerState<MainShell>
                       child: _buildUnifiedBottomBar(),
                     ),
                   ),
+                ),
+
+                // Interactive tutorial overlay
+                const Positioned.fill(
+                  child: TutorialOverlay(),
                 ),
               ],
             ),
