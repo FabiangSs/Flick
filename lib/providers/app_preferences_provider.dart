@@ -340,6 +340,14 @@ class AppPreferencesNotifier extends Notifier<AppPreferences> {
         .read(appPreferencesServiceProvider)
         .setReplaceAlbumWithBitPerfectCapsule(value);
   }
+
+  Future<void> setFolderGridPageSize(int value) async {
+    if (state.folderGridPageSize == value) return;
+    state = state.copyWith(folderGridPageSize: value);
+    await ref
+        .read(appPreferencesServiceProvider)
+        .setFolderGridPageSize(value);
+  }
 }
 
 final appPreferencesProvider =
